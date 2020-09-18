@@ -7,12 +7,18 @@ from openquake.hazardlib.gsim.kuehn_2020 import (
     KuehnEtAl2020SInter,
     KuehnEtAl2020SInterAlaska,
     KuehnEtAl2020SInterCascadia,
+    KuehnEtAl2020SInterCentralAmericaMexico,
+    KuehnEtAl2020SInterJapan,
     KuehnEtAl2020SInterNewZealand,
+    KuehnEtAl2020SInterSouthAmerica,
     KuehnEtAl2020SInterTaiwan,
     KuehnEtAl2020SSlab,
     KuehnEtAl2020SSlabAlaska,
     KuehnEtAl2020SSlabCascadia,
+    KuehnEtAl2020SSlabCentralAmericaMexico,
+    KuehnEtAl2020SSlabJapan,
     KuehnEtAl2020SSlabNewZealand,
+    KuehnEtAl2020SSlabSouthAmerica,
     KuehnEtAl2020SSlabTaiwan)
 from openquake.hazardlib.tests.gsim.utils import BaseGSIMTestCase
 
@@ -77,8 +83,43 @@ class KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
 # Interface Central America and Mexico
+class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
+    GSIM_CLASS = KuehnEtAl2020SInterCentralAmericaMexico
+    MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_CAM_MEAN.csv"
+    TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_CAM_TOTAL_STDDEV.csv"
+    INTER_FILE = "kuehn2020/KUEHN2020_INTERFACE_CAM_INTER_EVENT_STDDEV.csv"
+    INTRA_FILE = "kuehn2020/KUEHN2020_INTERFACE_CAM_INTRA_EVENT_STDDEV.csv"
 
-# Interface Japan
+    def test_mean(self):
+        self.check(self.MEAN_FILE, max_discrep_percentage=0.1)
+
+    def test_std_total(self):
+        self.check(self.TOTAL_FILE, max_discrep_percentage=0.1)
+
+    def test_std_inter_event(self):
+        self.check(self.INTER_FILE, max_discrep_percentage=0.1)
+
+    def test_std_intra_event(self):
+        self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
+
+# Interface Japanclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
+    GSIM_CLASS = KuehnEtAl2020SInterJapan
+    MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_MEAN.csv"
+    TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_TOTAL_STDDEV.csv"
+    INTER_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_INTER_EVENT_STDDEV.csv"
+    INTRA_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_INTRA_EVENT_STDDEV.csv"
+
+    def test_mean(self):
+        self.check(self.MEAN_FILE, max_discrep_percentage=0.1)
+
+    def test_std_total(self):
+        self.check(self.TOTAL_FILE, max_discrep_percentage=0.1)
+
+    def test_std_inter_event(self):
+        self.check(self.INTER_FILE, max_discrep_percentage=0.1)
+
+    def test_std_intra_event(self):
+        self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
 
 # Interface New Zealand
@@ -101,7 +142,24 @@ class KuehnEtAl2020SInterNewZealandTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Interface South America
+# Interface South Americaclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
+    GSIM_CLASS = KuehnEtAl2020SInterSouthAmerica
+    MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_MEAN.csv"
+    TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_TOTAL_STDDEV.csv"
+    INTER_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_INTER_EVENT_STDDEV.csv"
+    INTRA_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_INTRA_EVENT_STDDEV.csv"
+
+    def test_mean(self):
+        self.check(self.MEAN_FILE, max_discrep_percentage=0.1)
+
+    def test_std_total(self):
+        self.check(self.TOTAL_FILE, max_discrep_percentage=0.1)
+
+    def test_std_inter_event(self):
+        self.check(self.INTER_FILE, max_discrep_percentage=0.1)
+
+    def test_std_intra_event(self):
+        self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
 # Interface Taiwan
 class KuehnEtAl2020SInterTaiwanTestCase(BaseGSIMTestCase):
@@ -183,9 +241,44 @@ class KuehnEtAl2020SSlabCascadiaTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Intraslab Central America and Mexico
+# Interface Central America and Mexico
+class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
+    GSIM_CLASS = KuehnEtAl2020SSlabCentralAmericaMexico
+    MEAN_FILE = "kuehn2020/KUEHN2020_INSLAB_CAM_MEAN.csv"
+    TOTAL_FILE = "kuehn2020/KUEHN2020_INSLAB_CAM_TOTAL_STDDEV.csv"
+    INTER_FILE = "kuehn2020/KUEHN2020_INSLAB_CAM_INTER_EVENT_STDDEV.csv"
+    INTRA_FILE = "kuehn2020/KUEHN2020_INSLAB_CAM_INTRA_EVENT_STDDEV.csv"
 
-# Intraslab Japan
+    def test_mean(self):
+        self.check(self.MEAN_FILE, max_discrep_percentage=0.1)
+
+    def test_std_total(self):
+        self.check(self.TOTAL_FILE, max_discrep_percentage=0.1)
+
+    def test_std_inter_event(self):
+        self.check(self.INTER_FILE, max_discrep_percentage=0.1)
+
+    def test_std_intra_event(self):
+        self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
+
+# Interface Japanclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
+    GSIM_CLASS = KuehnEtAl2020SSlabJapan
+    MEAN_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_MEAN.csv"
+    TOTAL_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_TOTAL_STDDEV.csv"
+    INTER_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_INTER_EVENT_STDDEV.csv"
+    INTRA_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_INTRA_EVENT_STDDEV.csv"
+
+    def test_mean(self):
+        self.check(self.MEAN_FILE, max_discrep_percentage=0.1)
+
+    def test_std_total(self):
+        self.check(self.TOTAL_FILE, max_discrep_percentage=0.1)
+
+    def test_std_inter_event(self):
+        self.check(self.INTER_FILE, max_discrep_percentage=0.1)
+
+    def test_std_intra_event(self):
+        self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
 
 # Intraslab New Zealand
@@ -209,6 +302,24 @@ class KuehnEtAl2020SSlabNewZealandTestCase(BaseGSIMTestCase):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
 # Intraslab South America
+class KuehnEtAl2020SSlabSouthAmericaTestCase(BaseGSIMTestCase):
+    GSIM_CLASS = KuehnEtAl2020SSlabSouthAmerica
+    MEAN_FILE = "kuehn2020/KUEHN2020_INSLAB_SOUTHAMERICA_MEAN.csv"
+    TOTAL_FILE = "kuehn2020/KUEHN2020_INSLAB_SOUTHAMERICA_TOTAL_STDDEV.csv"
+    INTER_FILE = "kuehn2020/KUEHN2020_INSLAB_SOUTHAMERICA_INTER_EVENT_STDDEV.csv"
+    INTRA_FILE = "kuehn2020/KUEHN2020_INSLAB_SOUTHAMERICA_INTRA_EVENT_STDDEV.csv"
+
+    def test_mean(self):
+        self.check(self.MEAN_FILE, max_discrep_percentage=0.1)
+
+    def test_std_total(self):
+        self.check(self.TOTAL_FILE, max_discrep_percentage=0.1)
+
+    def test_std_inter_event(self):
+        self.check(self.INTER_FILE, max_discrep_percentage=0.1)
+
+    def test_std_intra_event(self):
+        self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
 # Intraslab Taiwan
 class KuehnEtAl2020SSlabTaiwanTestCase(BaseGSIMTestCase):
