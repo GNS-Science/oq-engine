@@ -102,7 +102,8 @@ class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Interface Japanclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
+# Interface Japan
+class KuehnEtAl2020SInterJapanTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SInterJapan
     MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_MEAN.csv"
     TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_TOTAL_STDDEV.csv"
@@ -142,7 +143,9 @@ class KuehnEtAl2020SInterNewZealandTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Interface South Americaclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
+
+# Interface South America
+class KuehnEtAl2020SInterSouthAmericaTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SInterSouthAmerica
     MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_MEAN.csv"
     TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_TOTAL_STDDEV.csv"
@@ -241,6 +244,7 @@ class KuehnEtAl2020SSlabCascadiaTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
+
 # Interface Central America and Mexico
 class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SSlabCentralAmericaMexico
@@ -261,7 +265,8 @@ class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Interface Japanclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
+# Interface Japan
+class KuehnEtAl2020SInterJapanTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SSlabJapan
     MEAN_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_MEAN.csv"
     TOTAL_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_TOTAL_STDDEV.csv"
@@ -279,6 +284,7 @@ class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
 
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
+
 
 
 # Intraslab New Zealand

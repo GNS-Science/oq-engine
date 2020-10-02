@@ -16,7 +16,7 @@ Module exports :class:`KuehnEtAl2020SInter`,
                :class:`KuehnEtAl2020SInterTaiwan`,
                :class:`KuehnEtAl2020SSlab`,
                :class:`KuehnEtAl2020SSlabAlaska`,
-               :class:`KuehnEtAl2020SSlabCascadia`,
+               :class:`KuehnEtAl2020SSlabCascadia`
                :class:`KuehnEtAl2020SSlabCentralAmericaMexico`,
                :class:`KuehnEtAl2020SSlabJapan`,
                :class:`KuehnEtAl2020SSlabNewZealand`,
@@ -439,6 +439,7 @@ class KuehnEtAl2020SInterCascadia(KuehnEtAl2020SInter):
                       "c_z_2": 2.302585092994046,
                       "c_z_3": 6.396929655216146,
                       "c_z_4": 0.27081458999999997}
+
 
 class KuehnEtAl2020SInterCentralAmericaMexico(KuehnEtAl2020SInter):
     """
@@ -933,6 +934,7 @@ class KuehnEtAl2020SSlabCascadia(KuehnEtAl2020SSlab):
                       "c_z_2": 2.302585092994046,
                       "c_z_3": 6.396929655216146,
                       "c_z_4": 0.27081458999999997}
+
 
 class KuehnEtAl2020SSlabCentralAmericaMexico(KuehnEtAl2020SSlab):
     """
