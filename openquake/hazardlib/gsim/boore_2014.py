@@ -371,6 +371,15 @@ class BooreEtAl2014(GMPE):
         "f3": 0.1,
         "v1": 225.0,
         "v2": 300.0}
+	
+class BooreEtAl2014LinSR(BooreEtAl2014):
+    def _get_nonlinear_site_term(self, C, vs30, pga_rock):
+        """
+        Remove the nonlinear site scaling term
+        """
+        
+        return 0
+	
 
 
 class BooreEtAl2014HighQ(BooreEtAl2014):
