@@ -42,6 +42,14 @@ class KuehnEtAl2020SInterTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
+    def test_mean_mb1(self):
+        self.check("kuehn2020/KUEHN2020_INTERFACE_GLOBAL_Mb7.7_MEAN.csv",
+                max_discrep_percentage=0.1, m_b=7.7)
+
+    def test_mean_mb1(self):
+        self.check("kuehn2020/KUEHN2020_INTERFACE_GLOBAL_Mb8.1_MEAN.csv",
+                max_discrep_percentage=0.1, m_b=8.1)
+
 # Interface Alaska
 class KuehnEtAl2020SInterAlaskaTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SInterAlaska
@@ -102,8 +110,7 @@ class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Interface Japan
-class KuehnEtAl2020SInterJapanTestCase(BaseGSIMTestCase):
+# Interface Japanclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SInterJapan
     MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_MEAN.csv"
     TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_JAPAN_TOTAL_STDDEV.csv"
@@ -143,9 +150,7 @@ class KuehnEtAl2020SInterNewZealandTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-
-# Interface South America
-class KuehnEtAl2020SInterSouthAmericaTestCase(BaseGSIMTestCase):
+# Interface South Americaclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SInterSouthAmerica
     MEAN_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_MEAN.csv"
     TOTAL_FILE = "kuehn2020/KUEHN2020_INTERFACE_SOUTHAMERICA_TOTAL_STDDEV.csv"
@@ -204,6 +209,14 @@ class KuehnEtAl2020SSlabTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
+    def test_mean_mb1(self):
+        self.check("kuehn2020/KUEHN2020_INSLAB_GLOBAL_Mb7.4_MEAN.csv",
+                max_discrep_percentage=0.1, m_b=7.4)
+
+    def test_mean_mb1(self):
+        self.check("kuehn2020/KUEHN2020_INSLAB_GLOBAL_Mb7.8_MEAN.csv",
+                max_discrep_percentage=0.1, m_b=7.8)
+
 # Intraslab Alaska
 class KuehnEtAl2020SSlabAlaskaTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SSlabAlaska
@@ -244,7 +257,6 @@ class KuehnEtAl2020SSlabCascadiaTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-
 # Interface Central America and Mexico
 class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SSlabCentralAmericaMexico
@@ -265,8 +277,7 @@ class KuehnEtAl2020SInterCentralAmericaMexicoTestCase(BaseGSIMTestCase):
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
 
-# Interface Japan
-class KuehnEtAl2020SInterJapanTestCase(BaseGSIMTestCase):
+# Interface Japanclass KuehnEtAl2020SInterCascadiaTestCase(BaseGSIMTestCase):
     GSIM_CLASS = KuehnEtAl2020SSlabJapan
     MEAN_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_MEAN.csv"
     TOTAL_FILE = "kuehn2020/KUEHN2020_INSLAB_JAPAN_TOTAL_STDDEV.csv"
@@ -284,7 +295,6 @@ class KuehnEtAl2020SInterJapanTestCase(BaseGSIMTestCase):
 
     def test_std_intra_event(self):
         self.check(self.INTRA_FILE, max_discrep_percentage=0.1)
-
 
 
 # Intraslab New Zealand

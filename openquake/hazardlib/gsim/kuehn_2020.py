@@ -67,6 +67,12 @@ class KuehnEtAl2020SInter(GMPE):
     #: Required distance measure is Rrup
     REQUIRES_DISTANCES = {'rrup'}
 
+    def __init__(self, m_b=-1, **kwargs):
+        super().__init__(m_b=m_b, **kwargs)
+
+        # magnitude break poin
+        self.m_b = m_b
+
     def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types):
         """
         See :meth:`superclass method
@@ -79,9 +85,12 @@ class KuehnEtAl2020SInter(GMPE):
         C_PGA = self.COEFFS[PGA()]
 
         # get magnitude break point
-        m_b = self.CONSTS['m_b']
+        if self.m_b == -1:
+            m_b = self.CONSTS['m_b']
+        else:
+            m_b = self.m_b
 
-        # get magntude break poit adjustment and calculate break point
+        # get magnitude break point adjustment and calculate break point
         mbreak = m_b + self._get_delta_mb(imt)
 
         # Get mean and standard deviation of PGA on rock (Vs30 1100 m/s^2)
