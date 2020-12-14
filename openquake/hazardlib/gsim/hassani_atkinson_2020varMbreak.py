@@ -60,30 +60,33 @@ class HassaniAtkinson2020SInter(GMPE):
 
     REQUIRES_SITES_PARAMETERS = {'fpeak', 'vs30', 'z2pt5'}
 
-    def __init__(self, kappa=0.04, backarc=0, forearc_ne=1, forearc_sw=0,
+    def __init__(self, kappa=0.04, m_b=-1, backarc=0, forearc_ne=1, forearc_sw=0,
                  **kwargs):
         """
         Aditional parameters.
         """
-        super().__init__(kappa=kappa, backarc=backarc, forearc_ne=forearc_ne,
-                         forearc_sw=forearc_sw, **kwargs)
+        super().__init__(kappa=kappa, m_b=m_b, backarc=backarc, forearc_ne=forearc_ne,
+                         forearc_sw=forearc_sw,**kwargs)
         # kappa parameter
         self.kappa = kappa
         # set proportion of rrups in backarc, forearc_ne and forearc_sw
         self.backarc = backarc
         self.forearc_ne = forearc_ne
         self.forearc_sw = forearc_sw
+        # magnitude breakpoint
+        self.m_b = m_b
 
-
-    def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types, m_b=-1):
+    def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types):
         """
         See :meth:`superclass method
         <.base.GroundShakingIntensityModel.get_mean_and_stddevs>`
         for spec of input and result values.
         """
-        if m_b == -1:
+        if self.m_b == -1:
             # get magnitude break point
             m_b = self.COEFFS[PGA()]['mh']
+        else:
+            m_b = self.m_b
 
         # extract dictionaries of coefficients specific to required
         # intensity measure type

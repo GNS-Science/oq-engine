@@ -66,13 +66,13 @@ class ParkerEtAl2020SInter(GMPE):
     #: interface events
     REQUIRES_DISTANCES = {'rrup'}
 
-    def __init__(self, region=None, saturation_region=None, basin=None,
+    def __init__(self, m_b=-1, region=None, saturation_region=None, basin=None,
                  **kwargs):
         """
         Enable setting regions to prevent messy overriding
         and code duplication.
         """
-        super().__init__(region=region, saturation_region=saturation_region,
+        super().__init__(m_b=m_b, region=region, saturation_region=saturation_region,
                          basin=basin, **kwargs)
         self.region = region
         if saturation_region is None:
@@ -81,16 +81,21 @@ class ParkerEtAl2020SInter(GMPE):
             self.saturation_region = saturation_region
         self.basin = basin
 
+        # magbitude pbreakpoint
+        self.m_b = m_b
 
-    def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types, m_b = -1):
+
+    def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types):
         """
         See :meth:`superclass method
         <.base.GroundShakingIntensityModel.get_mean_and_stddevs>`
         for spec of input and result values.
         """
-        if m_b == -1:
+        if self.m_b == -1:
             # get magnitude break point
             m_b = self._get_mb()
+        else:
+            m_b = self.m_b
 
         # extract dictionaries of coefficients specific to required
         # intensity measure type and for PGA

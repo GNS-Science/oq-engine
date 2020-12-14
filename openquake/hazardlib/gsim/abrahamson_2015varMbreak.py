@@ -89,20 +89,23 @@ class AbrahamsonEtAl2015SInter(GMPE):
     #: Reference soil conditions (bottom of page 29)
     DEFINED_FOR_REFERENCE_VELOCITY = 1000
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, m_b =-1, **kwargs):
+        super().__init__(m_b=m_b, **kwargs)
         self.ergodic = kwargs.get('ergodic', True)
+        # magnitude break point
+        self.m_b = m_b
 
-
-    def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types, m_b=-1):
+    def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types):
         """
         See :meth:`superclass method
         <.base.GroundShakingIntensityModel.get_mean_and_stddevs>`
         for spec of input and result values.
         """
-        if m_b == -1:
+        if self.m_b == -1:
             # get magnitude break point
             m_b = self.CONSTS["C1"]
+        else:
+            m_b = self.m_b
 
         # extract dictionaries of coefficients specific to required
         # intensity measure type and for PGA
@@ -111,11 +114,12 @@ class AbrahamsonEtAl2015SInter(GMPE):
         mbreak = m_b + dc1
         C_PGA = self.COEFFS[PGA()]
         mbreak_pga = m_b + self._get_delta_c1(PGA())
+        dc1_pga = self._get_delta_c1(PGA())
         # compute median pga on rock (vs30=1000), needed for site response
         # term calculation
         pga1000 = np.exp(
-            self._compute_pga_rock(C_PGA, mbreak_pga, sites, rup, dists))
-        mean = (self._compute_magnitude_term(C, mbreak, rup.mag) +
+            self._compute_pga_rock(C_PGA, mbreak_pga, dc1_pga, sites, rup, dists))
+        mean = (self._compute_magnitude_term(C, mbreak, dc1, rup.mag) +
                 self._compute_distance_term(C, rup.mag, dists) +
                 self._compute_focal_depth_term(C, rup) +
                 self._compute_forearc_backarc_term(C, sites, dists) +
@@ -131,12 +135,12 @@ class AbrahamsonEtAl2015SInter(GMPE):
         """
         return self.COEFFS_MAG_SCALE[imt]["dc1"]
 
-    def _compute_pga_rock(self, C, mbreak, sites, rup, dists):
+    def _compute_pga_rock(self, C, mbreak, dc1, sites, rup, dists):
         """
         Compute and return mean imt value for rock conditions
         (vs30 = 1000 m/s)
         """
-        mean = (self._compute_magnitude_term(C, mbreak, rup.mag) +
+        mean = (self._compute_magnitude_term(C, mbreak, dc1, rup.mag) +
                 self._compute_distance_term(C, rup.mag, dists) +
                 self._compute_focal_depth_term(C, rup) +
                 self._compute_forearc_backarc_term(C, sites, dists))
@@ -145,7 +149,7 @@ class AbrahamsonEtAl2015SInter(GMPE):
                          np.log(1000. / C['vlin']))
         return mean + site_response
 
-    def _compute_magnitude_term(self, C, mbreak, mag):
+    def _compute_magnitude_term(self, C, mbreak, dc1, mag):
         """
         Computes the magnitude scaling term given by equation (2)
 
