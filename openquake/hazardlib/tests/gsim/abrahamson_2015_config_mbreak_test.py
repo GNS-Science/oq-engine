@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>.
 
-from openquake.hazardlib.gsim.abrahamson_2015varMbreak import (
+from openquake.hazardlib.gsim.abrahamson_2015_config_mbreak import (
     AbrahamsonEtAl2015SInter,
     AbrahamsonEtAl2015SInterHigh,
     AbrahamsonEtAl2015SInterLow,

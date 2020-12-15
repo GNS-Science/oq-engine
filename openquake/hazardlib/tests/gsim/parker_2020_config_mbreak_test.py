@@ -16,7 +16,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>.
 
-from openquake.hazardlib.gsim.parker_2020varMbreak import (
+from openquake.hazardlib.gsim.parker_2020_config_mbreak import (
     ParkerEtAl2020SInter, ParkerEtAl2020SInterB,
     ParkerEtAl2020SSlab, ParkerEtAl2020SSlabB)
 
