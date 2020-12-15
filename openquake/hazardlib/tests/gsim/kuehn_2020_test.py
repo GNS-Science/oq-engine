@@ -46,9 +46,17 @@ class KuehnEtAl2020SInterTestCase(BaseGSIMTestCase):
         self.check("kuehn2020/KUEHN2020_INTERFACE_GLOBAL_Mb7.7_MEAN.csv",
                 max_discrep_percentage=0.1, m_b=7.7)
 
-    def test_mean_mb1(self):
+    def test_mean_mb2(self):
         self.check("kuehn2020/KUEHN2020_INTERFACE_GLOBAL_Mb8.1_MEAN.csv",
                 max_discrep_percentage=0.1, m_b=8.1)
+
+    def test_mean_eps1(self):
+        self.check("kuehn2020/KUEHN2020_INTERFACE_GLOBAL_epsilon1_MEAN.csv",
+                max_discrep_percentage=0.1, sigma_mu_epsilon=1)
+
+    def test_mean_eps2(self):
+        self.check("kuehn2020/KUEHN2020_INTERFACE_GLOBAL_epsilon-1_MEAN.csv",
+                max_discrep_percentage=0.1, sigma_mu_epsilon=-1)
 
 # Interface Alaska
 class KuehnEtAl2020SInterAlaskaTestCase(BaseGSIMTestCase):
@@ -213,9 +221,17 @@ class KuehnEtAl2020SSlabTestCase(BaseGSIMTestCase):
         self.check("kuehn2020/KUEHN2020_INSLAB_GLOBAL_Mb7.4_MEAN.csv",
                 max_discrep_percentage=0.1, m_b=7.4)
 
-    def test_mean_mb1(self):
+    def test_mean_mb2(self):
         self.check("kuehn2020/KUEHN2020_INSLAB_GLOBAL_Mb7.8_MEAN.csv",
                 max_discrep_percentage=0.1, m_b=7.8)
+
+    def test_mean_eps1(self):
+        self.check("kuehn2020/KUEHN2020_INSLAB_GLOBAL_epsilon1_MEAN.csv",
+                max_discrep_percentage=0.1, sigma_mu_epsilon=1)
+
+    def test_mean_eps2(self):
+        self.check("kuehn2020/KUEHN2020_INSLAB_GLOBAL_epsilon-1_MEAN.csv",
+                max_discrep_percentage=0.1, sigma_mu_epsilon=-1)
 
 # Intraslab Alaska
 class KuehnEtAl2020SSlabAlaskaTestCase(BaseGSIMTestCase):

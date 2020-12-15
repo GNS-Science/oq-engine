@@ -24,10 +24,15 @@ Module exports :class:`KuehnEtAl2020SInter`,
                :class:`KuehnEtAl2020SSlabTaiwan`
 """
 import numpy as np
+import os
+import h5py
+from scipy.interpolate import interp1d
 
 from openquake.hazardlib.gsim.base import GMPE, CoeffsTable
 from openquake.hazardlib import const
 from openquake.hazardlib.imt import PGA, PGV, SA
+
+BASE_PATH = os.path.join(os.path.dirname(__file__), "kuehn_2020_tables")
 
 class KuehnEtAl2020SInter(GMPE):
     """
@@ -68,11 +73,40 @@ class KuehnEtAl2020SInter(GMPE):
     #: Required distance measure is Rrup
     REQUIRES_DISTANCES = {'rrup'}
 
-    def __init__(self, m_b=-1, **kwargs):
-        super().__init__(m_b=m_b, **kwargs)
+    def __init__(self, m_b=-1, sigma_mu_epsilon=0.0, **kwargs):
+        super().__init__(m_b=m_b, sigma_mu_epsilon=sigma_mu_epsilon, **kwargs)
 
-        # magnitude break poin
+        # magnitude break point
         self.m_b = m_b
+        
+        # epsilon for epistemic uncertainty
+        self.sigma_mu_epsilon = sigma_mu_epsilon
+        if self.sigma_mu_epsilon:
+            # Connect to hdf5 and load tables into memory
+            self.retrieve_sigma_mu_data()
+        else:
+            # No adjustments, so skip this step
+            self.mags = None
+            self.dists = None
+            self.s_a = None
+            self.pga = None
+            self.pgv = None
+            self.periods = None
+    
+    def retrieve_sigma_mu_data(self):
+        """
+        For the general form of the GMPE this retrieves the sigma mu
+        values from the hdf5 file using the "general" model, i.e. sigma mu
+        factors that are independent of the choice of region or depth
+        """
+        fle = h5py.File(os.path.join(BASE_PATH, self.CONSTS["file_unc"]), "r")
+        self.mags = fle["M"][:]
+        self.dists = fle["R"][:]
+        self.periods = fle["T"][:]
+        self.pga = fle["PGA"][:]
+        self.pgv = fle["PGV"][:]
+        self.s_a = fle["SA"][:]
+        fle.close()
 
     def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types):
         """
@@ -110,6 +144,13 @@ class KuehnEtAl2020SInter(GMPE):
         stddevs = self.get_stddevs(
             C, stddev_types, num_sites=len(sites.vs30)
         )
+        
+        if self.sigma_mu_epsilon:
+            # Apply the epistemic uncertainty factor (sigma_mu) multiplied by
+            # the number of standard deviations
+            sigma_mu = self.get_sigma_mu_adjustment(C, imt, rup, dists)
+            mean += (self.sigma_mu_epsilon * sigma_mu)
+            
         return mean, stddevs
 
     def get_mean_values(self, C, m_b, sites, rup, dists, a1100):
@@ -243,6 +284,45 @@ class KuehnEtAl2020SInter(GMPE):
         Returns the adjustment to the magnitude break point
         """
         return self.COEFFS_MAG_SCALE[imt]["dm_b"]
+    
+    def get_sigma_mu_adjustment(self, C, imt, rup, dists):
+        """
+        Returns the sigma mu adjustment factor
+        """
+        if imt.name in "PGA PGV":
+            # PGA and PGV are 2D arrays of dimension [nmags, ndists]
+            sigma_mu = getattr(self, imt.name.lower())
+            if rup.mag <= self.mags[0]:
+                sigma_mu_m = sigma_mu[0, :]
+            elif rup.mag >= self.mags[-1]:
+                sigma_mu_m = sigma_mu[-1, :]
+            else:
+                intpl1 = interp1d(self.mags, sigma_mu, axis=0)
+                sigma_mu_m = intpl1(rup.mag)
+            # Linear interpolation with distance
+            intpl2 = interp1d(self.dists, sigma_mu_m, bounds_error=False,
+                              fill_value=(sigma_mu_m[0], sigma_mu_m[-1]))
+            return intpl2(dists.rrup)
+        # In the case of SA the array is of dimension [nmags, ndists, nperiods]
+        # Get values for given magnitude
+        if rup.mag <= self.mags[0]:
+            sigma_mu_m = self.s_a[0, :, :]
+        elif rup.mag >= self.mags[-1]:
+            sigma_mu_m = self.s_a[-1, :, :]
+        else:
+            intpl1 = interp1d(self.mags, self.s_a, axis=0)
+            sigma_mu_m = intpl1(rup.mag)
+        # Get values for period - N.B. ln T, linear sigma mu interpolation
+        if imt.period <= self.periods[0]:
+            sigma_mu_t = sigma_mu_m[:, 0]
+        elif imt.period >= self.periods[-1]:
+            sigma_mu_t = sigma_mu_m[:, -1]
+        else:
+            intpl2 = interp1d(np.log(self.periods), sigma_mu_m, axis=1)
+            sigma_mu_t = intpl2(np.log(imt.period))
+        intpl3 = interp1d(self.dists, sigma_mu_t, bounds_error=False,
+                          fill_value=(sigma_mu_t[0], sigma_mu_t[-1]))
+        return intpl3(dists.rrup)
 
     def get_stddevs(self, C, stddev_types, num_sites):
         """
@@ -336,7 +416,8 @@ imt     mu_c_1_if  mu_c_1_slab  c_2_if    c_2_slab  c_3       c_4_if    c_4_slab
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b":7.9}
+              "m_b":7.9,
+              "file_unc":"kuehn2020_uncertainty_if_Global.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1":0,
                       "c_z_2":0,
@@ -375,7 +456,8 @@ class KuehnEtAl2020SInterAlaska(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.6}
+              "m_b": 8.6,
+              "file_unc":"kuehn2020_uncertainty_if_Alaska.hdf5"}
 
 class KuehnEtAl2020SInterCascadia(KuehnEtAl2020SInter):
     """
@@ -443,7 +525,8 @@ class KuehnEtAl2020SInterCascadia(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.}
+              "m_b": 8.,
+              "file_unc":"kuehn2020_uncertainty_if_Cascadia.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 8.294049640102028,
                       "c_z_2": 2.302585092994046,
@@ -495,7 +578,8 @@ class KuehnEtAl2020SInterCentralAmericaMexico(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 7.5}
+              "m_b": 7.5,
+              "file_unc":"kuehn2020_uncertainty_if_CentralAmericaMexico.hdf5"}
 
 
 class KuehnEtAl2020SInterJapan(KuehnEtAl2020SInter):
@@ -578,7 +662,8 @@ class KuehnEtAl2020SInterJapan(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.5}
+              "m_b": 8.5,
+              "file_unc":"kuehn2020_uncertainty_if_Japan.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 7.689368537500001,
                       "c_z_2": 2.302585092994046,
@@ -652,7 +737,8 @@ class KuehnEtAl2020SInterNewZealand(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.3}
+              "m_b": 8.3,
+              "file_unc":"kuehn2020_uncertainty_if_NewZealand.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.859789675000001,
                       "c_z_2": 2.302585092994046,
@@ -704,7 +790,8 @@ class KuehnEtAl2020SInterSouthAmerica(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.6}
+              "m_b": 8.6,
+              "file_unc":"kuehn2020_uncertainty_if_SouthAmerica.hdf5"}
 
 
 class KuehnEtAl2020SInterTaiwan(KuehnEtAl2020SInter):
@@ -773,7 +860,8 @@ class KuehnEtAl2020SInterTaiwan(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 7.1}
+              "m_b": 7.1,
+              "file_unc":"kuehn2020_uncertainty_if_Taiwan.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.30560665,
                       "c_z_2": 2.302585092994046,
@@ -837,7 +925,8 @@ class KuehnEtAl2020SSlab(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.6}
+              "m_b": 7.6,
+              "file_unc":"kuehn2020_uncertainty_slab_Global.hdf5"}
 
 class KuehnEtAl2020SSlabAlaska(KuehnEtAl2020SSlab):
     """
@@ -870,7 +959,8 @@ class KuehnEtAl2020SSlabAlaska(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.2}
+              "m_b": 7.2,
+              "file_unc":"kuehn2020_uncertainty_slab_Alaska.hdf5"}
 
 class KuehnEtAl2020SSlabCascadia(KuehnEtAl2020SSlab):
     """
@@ -938,7 +1028,8 @@ class KuehnEtAl2020SSlabCascadia(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.2}
+              "m_b": 7.2,
+              "file_unc":"kuehn2020_uncertainty_slab_Cascadia.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 8.294049640102028,
                       "c_z_2": 2.302585092994046,
@@ -990,7 +1081,8 @@ class KuehnEtAl2020SSlabCentralAmericaMexico(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.4}
+              "m_b": 7.4,
+              "file_unc":"kuehn2020_uncertainty_slab_CentralAmericaMexico.hdf5"}
 
 class KuehnEtAl2020SSlabJapan(KuehnEtAl2020SSlab):
     """
@@ -1070,7 +1162,8 @@ class KuehnEtAl2020SSlabJapan(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.6}
+              "m_b": 7.6,
+              "file_unc":"kuehn2020_uncertainty_slab_Japan.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 7.689368537500001,
                       "c_z_2": 2.302585092994046,
@@ -1144,7 +1237,8 @@ class KuehnEtAl2020SSlabNewZealand(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.6}
+              "m_b": 7.6,
+              "file_unc":"kuehn2020_uncertainty_slab_NewZealand.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.859789675000001,
                       "c_z_2": 2.302585092994046,
@@ -1195,7 +1289,8 @@ class KuehnEtAl2020SSlabSouthAmerica(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.3}
+              "m_b": 7.3,
+              "file_unc":"kuehn2020_uncertainty_slab_SouthAmerica.hdf5"}
 
 
 class KuehnEtAl2020SSlabTaiwan(KuehnEtAl2020SSlab):
@@ -1264,7 +1359,8 @@ class KuehnEtAl2020SSlabTaiwan(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.7}
+              "m_b": 7.7,
+              "file_unc":"kuehn2020_uncertainty_slab_Taiwan.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.30560665,
                       "c_z_2": 2.302585092994046,
