@@ -89,7 +89,7 @@ class AbrahamsonEtAl2015SInter(GMPE):
     #: Reference soil conditions (bottom of page 29)
     DEFINED_FOR_REFERENCE_VELOCITY = 1000
 
-    def __init__(self, m_b =-1, **kwargs):
+    def __init__(self, m_b=-1, **kwargs):
         super().__init__(m_b=m_b, **kwargs)
         self.ergodic = kwargs.get('ergodic', True)
         # magnitude break point
@@ -126,7 +126,6 @@ class AbrahamsonEtAl2015SInter(GMPE):
                 self._compute_site_response_term(C, sites, pga1000))
         stddevs = self._get_stddevs(C, stddev_types, len(sites.vs30))
         return mean, stddevs
-
 
     def _get_delta_c1(self, imt):
         """
