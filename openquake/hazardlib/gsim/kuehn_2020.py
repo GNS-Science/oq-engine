@@ -9,25 +9,37 @@
 Module exports :class:`KuehnEtAl2020SInter`,
                :class:`KuehnEtAl2020SInterAlaska`,
                :class:`KuehnEtAl2020SInterCascadia`,
+               :class:`KuehnEtAl2020SInterCentralAmericaMexico`,
+               :class:`KuehnEtAl2020SInterJapan`,
                :class:`KuehnEtAl2020SInterNewZealand`,
+               :class:`KuehnEtAl2020SInterSouthAmerica`,
                :class:`KuehnEtAl2020SInterTaiwan`,
                :class:`KuehnEtAl2020SSlab`,
                :class:`KuehnEtAl2020SSlabAlaska`,
-               :class:`KuehnEtAl2020SSlabCascadia`,
+               :class:`KuehnEtAl2020SSlabCascadia`
+               :class:`KuehnEtAl2020SSlabCentralAmericaMexico`,
+               :class:`KuehnEtAl2020SSlabJapan`,
                :class:`KuehnEtAl2020SSlabNewZealand`,
+               :class:`KuehnEtAl2020SSlabSouthAmerica`,
                :class:`KuehnEtAl2020SSlabTaiwan`
 """
 import numpy as np
+import os
+import h5py
+from scipy.interpolate import interp1d
 
 from openquake.hazardlib.gsim.base import GMPE, CoeffsTable
 from openquake.hazardlib import const
 from openquake.hazardlib.imt import PGA, PGV, SA
+
+BASE_PATH = os.path.join(os.path.dirname(__file__), "kuehn_2020_tables")
 
 class KuehnEtAl2020SInter(GMPE):
     """
     Implements NGA Subduction model KBCG20.
     For Interface events.
     """
+    experimental = True
 
     #: Supported tectonic region type is subduction interface
     DEFINED_FOR_TECTONIC_REGION_TYPE = const.TRT.SUBDUCTION_INTERFACE
@@ -61,6 +73,41 @@ class KuehnEtAl2020SInter(GMPE):
     #: Required distance measure is Rrup
     REQUIRES_DISTANCES = {'rrup'}
 
+    def __init__(self, m_b=-1, sigma_mu_epsilon=0.0, **kwargs):
+        super().__init__(m_b=m_b, sigma_mu_epsilon=sigma_mu_epsilon, **kwargs)
+
+        # magnitude break point
+        self.m_b = m_b
+        
+        # epsilon for epistemic uncertainty
+        self.sigma_mu_epsilon = sigma_mu_epsilon
+        if self.sigma_mu_epsilon:
+            # Connect to hdf5 and load tables into memory
+            self.retrieve_sigma_mu_data()
+        else:
+            # No adjustments, so skip this step
+            self.mags = None
+            self.dists = None
+            self.s_a = None
+            self.pga = None
+            self.pgv = None
+            self.periods = None
+    
+    def retrieve_sigma_mu_data(self):
+        """
+        For the general form of the GMPE this retrieves the sigma mu
+        values from the hdf5 file using the "general" model, i.e. sigma mu
+        factors that are independent of the choice of region or depth
+        """
+        fle = h5py.File(os.path.join(BASE_PATH, self.CONSTS["file_unc"]), "r")
+        self.mags = fle["M"][:]
+        self.dists = fle["R"][:]
+        self.periods = fle["T"][:]
+        self.pga = fle["PGA"][:]
+        self.pgv = fle["PGV"][:]
+        self.s_a = fle["SA"][:]
+        fle.close()
+
     def get_mean_and_stddevs(self, sites, rup, dists, imt, stddev_types):
         """
         See :meth:`superclass method
@@ -73,9 +120,12 @@ class KuehnEtAl2020SInter(GMPE):
         C_PGA = self.COEFFS[PGA()]
 
         # get magnitude break point
-        m_b = self.CONSTS['m_b']
+        if self.m_b == -1:
+            m_b = self.CONSTS['m_b']
+        else:
+            m_b = self.m_b
 
-        # get magntude break poit adjustment and calculate break point
+        # get magnitude break point adjustment and calculate break point
         mbreak = m_b + self._get_delta_mb(imt)
 
         # Get mean and standard deviation of PGA on rock (Vs30 1100 m/s^2)
@@ -94,6 +144,13 @@ class KuehnEtAl2020SInter(GMPE):
         stddevs = self.get_stddevs(
             C, stddev_types, num_sites=len(sites.vs30)
         )
+        
+        if self.sigma_mu_epsilon:
+            # Apply the epistemic uncertainty factor (sigma_mu) multiplied by
+            # the number of standard deviations
+            sigma_mu = self.get_sigma_mu_adjustment(C, imt, rup, dists)
+            mean += (self.sigma_mu_epsilon * sigma_mu)
+            
         return mean, stddevs
 
     def get_mean_values(self, C, m_b, sites, rup, dists, a1100):
@@ -227,6 +284,45 @@ class KuehnEtAl2020SInter(GMPE):
         Returns the adjustment to the magnitude break point
         """
         return self.COEFFS_MAG_SCALE[imt]["dm_b"]
+    
+    def get_sigma_mu_adjustment(self, C, imt, rup, dists):
+        """
+        Returns the sigma mu adjustment factor
+        """
+        if imt.name in "PGA PGV":
+            # PGA and PGV are 2D arrays of dimension [nmags, ndists]
+            sigma_mu = getattr(self, imt.name.lower())
+            if rup.mag <= self.mags[0]:
+                sigma_mu_m = sigma_mu[0, :]
+            elif rup.mag >= self.mags[-1]:
+                sigma_mu_m = sigma_mu[-1, :]
+            else:
+                intpl1 = interp1d(self.mags, sigma_mu, axis=0)
+                sigma_mu_m = intpl1(rup.mag)
+            # Linear interpolation with distance
+            intpl2 = interp1d(self.dists, sigma_mu_m, bounds_error=False,
+                              fill_value=(sigma_mu_m[0], sigma_mu_m[-1]))
+            return intpl2(dists.rrup)
+        # In the case of SA the array is of dimension [nmags, ndists, nperiods]
+        # Get values for given magnitude
+        if rup.mag <= self.mags[0]:
+            sigma_mu_m = self.s_a[0, :, :]
+        elif rup.mag >= self.mags[-1]:
+            sigma_mu_m = self.s_a[-1, :, :]
+        else:
+            intpl1 = interp1d(self.mags, self.s_a, axis=0)
+            sigma_mu_m = intpl1(rup.mag)
+        # Get values for period - N.B. ln T, linear sigma mu interpolation
+        if imt.period <= self.periods[0]:
+            sigma_mu_t = sigma_mu_m[:, 0]
+        elif imt.period >= self.periods[-1]:
+            sigma_mu_t = sigma_mu_m[:, -1]
+        else:
+            intpl2 = interp1d(np.log(self.periods), sigma_mu_m, axis=1)
+            sigma_mu_t = intpl2(np.log(imt.period))
+        intpl3 = interp1d(self.dists, sigma_mu_t, bounds_error=False,
+                          fill_value=(sigma_mu_t[0], sigma_mu_t[-1]))
+        return intpl3(dists.rrup)
 
     def get_stddevs(self, C, stddev_types, num_sites):
         """
@@ -320,7 +416,8 @@ imt     mu_c_1_if  mu_c_1_slab  c_2_if    c_2_slab  c_3       c_4_if    c_4_slab
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b":7.9}
+              "m_b":7.9,
+              "file_unc":"kuehn2020_uncertainty_if_Global.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1":0,
                       "c_z_2":0,
@@ -359,7 +456,8 @@ class KuehnEtAl2020SInterAlaska(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.6}
+              "m_b": 8.6,
+              "file_unc":"kuehn2020_uncertainty_if_Alaska.hdf5"}
 
 class KuehnEtAl2020SInterCascadia(KuehnEtAl2020SInter):
     """
@@ -411,11 +509,12 @@ class KuehnEtAl2020SInterCascadia(KuehnEtAl2020SInter):
     def get_basin_response_term(self, C, z_value, vs30):
         """
         Returns the basin response term (Eq. 4.10)
+        Internal scale of Z2.5 is in meters
         """
         mask = (z_value > 0)
         brt = np.zeros_like(z_value)
         brt[mask] = C["c_11_Ca"] + C["c_12_Ca"] * \
-                    (np.log(z_value[mask]) - self._get_ln_z_ref(vs30[mask]))
+                    (np.log(z_value[mask] * 1000.) - self._get_ln_z_ref(vs30[mask]))
         return brt
 
     CONSTS = {"c_10": 0.0,
@@ -426,160 +525,150 @@ class KuehnEtAl2020SInterCascadia(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.}
+              "m_b": 8.,
+              "file_unc":"kuehn2020_uncertainty_if_Cascadia.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 8.294049640102028,
                       "c_z_2": 2.302585092994046,
                       "c_z_3": 6.396929655216146,
                       "c_z_4": 0.27081458999999997}
 
-# class KuehnEtAl2020SInterCentralAmericaMexico(KuehnEtAl2020SInter):
-#     """
-#     Implements the regional interface model for Central America and Mexico
-#     """
-#
-#     #: Distance fraction in backarc
-#     DISTANCE_FRACTION = {'alpha_backarc'}
-#
-#     def get_anelastic_attenuation_term(self, C, dists):
-#         """
-#         Returns the anelastic attenuation term (Eq. 4.9)
-#         Depends on forearc/backarc attenuation
-#         Depends on arc crossing path
-#         alpha is fraction of path in backarc
-#         """
-#         [c_6xc, c_6_x1, c_6_x2, c_6_1, c_6_2] = self._get_anelastic_coeff(C)
-#         r1 = dists.alpha_backarc * dists.rrup # distance in backarc
-#         r2 = dists.rrup - r1                  # distance in forearc
-#
-#         fx = np.ones(len(r1))
-#         fx[dists.alpha_backarc == 0] = 0
-#         fx[dists.alpha_backarc == 1] = 0
-#         return fx * (c_6xc + c_6_x1 * 1 + c_6_x2 * r2) + (1 - fx) * (c_6_1 * r1 + c_6_2 * r2)
-#
-#     def get_base_term(self, C):
-#         """
-#         Returns the constant coefficient for Central America and Mexico
-#         """
-#         return C["c_1_if_reg_CAM"]
-#
-#     def _get_anelastic_coeff(self, C):
-#         """
-#         Returns the anelastic coefficient for Central America and Mexico
-#         """
-#         return C[["c_6xc", "c_6_x1_reg_CAM", "c_6_x2_reg_CAM", "c_6_1_reg_CAM", "c_6_2_reg_CAM"]]
-#
-#     def _get_linear_site_coeff(self, C):
-#         """
-#         Returns the linear site scaling coefficient for Central America and Mexico
-#         """
-#         return C["c_7_reg_CAM"]
-#
-#     CONSTS = {"c_10": 0.0,
-#               "c": 1.88,
-#               "n": 1.18,
-#               "delta_m": 0.1,
-#               "delta_z": 1,
-#               "Mref": 6.0,
-#               "Zref": 15,
-#               "z_b": 30,
-#               "m_b": 7.5}
+
+class KuehnEtAl2020SInterCentralAmericaMexico(KuehnEtAl2020SInter):
+    """
+    Implements the regional interface model for Central America and Mexico
+    """
+
+    def get_anelastic_attenuation_term(self, C, dists):
+        """
+        Returns the anelastic attenuation term (Eq. 4.9)
+        Depends on forearc/backarc attenuation
+        Depends on arc crossing path
+        alpha is fraction of path in backarc
+        
+        backarc scaling is not implemented
+        """
+        c_6 = self._get_anelastic_coeff(C)
+        return c_6 * dists.rrup
+
+    def get_base_term(self, C):
+        """
+        Returns the constant coefficient for Central America and Mexico
+        """
+        return C["c_1_if_reg_CAM"]
+
+    def _get_anelastic_coeff(self, C):
+        """
+        Returns the anelastic coefficient for Central America and Mexico
+        """
+        #return C[["c_6xc", "c_6_x1_reg_CAM", "c_6_x2_reg_CAM", "c_6_1_reg_CAM", "c_6_2_reg_CAM"]]
+        return C["c_6_2_reg_CAM"]
+
+    def _get_linear_site_coeff(self, C):
+        """
+        Returns the linear site scaling coefficient for Central America and Mexico
+        """
+        return C["c_7_reg_CAM"]
+
+    CONSTS = {"c_10": 0.0,
+              "c": 1.88,
+              "n": 1.18,
+              "delta_m": 0.1,
+              "delta_z": 1,
+              "Mref": 6.0,
+              "Zref": 15,
+              "z_b": 30,
+              "m_b": 7.5,
+              "file_unc":"kuehn2020_uncertainty_if_CentralAmericaMexico.hdf5"}
 
 
-# class KuehnEtAl2020SInterJapan(KuehnEtAl2020SInter):
-#     """
-#     Implements the regional interface model for Japan
-#     """
-#
-#     #: Required site parameters are Vs30, Vs30 type (measured or inferred),
-#     #: and depth (km) to the 2.5 km/s shear wave velocity layer (z2pt5)
-#     REQUIRES_SITES_PARAMETERS = {'vs30', 'z2pt5'}
-#
-#     #: Required distance measure is Rrup and fraction in backarc
-#     #: and fraction in Nankai region
-#     REQUIRES_DISTANCES = set(('rrup', 'alpha_backarc', 'alpha_nankai'))
-#
-#     def get_mean_values(self, C, m_b, sites, rup, dists, a1100):
-#         """
-#         Returns the mean values for a specific IMT
-#         """
-#         if isinstance(a1100, np.ndarray):
-#             # Site model defined
-#             temp_vs30 = sites.vs30
-#             temp_z = sites.z2pt5
-#         else:
-#             # Default site and basin model
-#             temp_vs30 = 1100.0 * np.ones(len(sites.vs30))
-#             temp_z = -1 * np.ones(len(sites.vs30))
-#
-#         return (self.get_base_term(C) +
-#                 self.get_magnitude_scaling_term(C, m_b, rup.mag) +
-#                 self.get_geometric_attenuation_term(C, rup.mag, dists.rrup) +
-#                 self.get_shallow_site_response_term(C, temp_vs30, a1100) +
-#                 self.get_basin_response_term(C, temp_z, temp_vs30) +
-#                 self.get_depth_term(C, rup.ztor) +
-#                 self.get_anelastic_attenuation_term(C, dists))
-#
-#     def get_anelastic_attenuation_term(self, C, dists):
-#         """
-#         Returns the anelastic attenuation term (Eq. 4.9)
-#         Depends on forearc/backarc attenuation
-#         Depends on arc crossing path
-#         """
-#         [c_6xc, c_6_x1, c_6_x2, c_6_x3, c_6_1, c_6_2, c_6_3] = self._get_anelastic_coeff(C)
-#         r1 = dists.alpha_backarc * dists.rrup
-#         r3 = dists.alpha_nankai * dists.rrup
-#         r2 = rrup - r1 - r3
-#
-#         # NEEDS WORK
-#         fx = np.ones(len(r1))
-#         fx[dists.alpha_backarc == 0] = 0
-#         fx[dists.alpha_backarc == 1] = 0
-#         return fx * (c_6xc + c_6_x1 * 1 + c_6_x2 * r2 + c_6_x3 * r3) + (1 - fx) * (c_6_1 * r1 + c_6_2 * r2 + c_6_3 * r3)
-#
-#     def get_base_term(self, C):
-#         """
-#         Returns the constant coefficient for Japan
-#         """
-#         return C["c_1_if_reg_Ja"]
-#
-#     def _get_anelastic_coeff(self, C):
-#         """
-#         Returns the anelastic coefficients for Japan
-#         """
-#         return C[["c_6xc", "c_6_x1_reg_Ja", "c_6_x2_reg_Ja", "c_6_x3_reg_Ja",\
-#                   "c_6_1_reg_Ja", "c_6_2_reg_Ja", "c_6_3_reg_Ja"]]
-#
-#     def _get_linear_site_coeff(self, C):
-#         """
-#         Returns the linear site scaling coefficient for Japan
-#         """
-#         return C["c_7_reg_Ja"]
-#
-#     def get_basin_response_term(self, C, z_value, vs30):
-#         """
-#         Returns the basin response term (Eq. 4.10)
-#         """
-#         if (z_value <= 0):
-#             return 0.
-#         else:
-#             ln_z_ref = self._get_ln_z_ref(vs30)
-#             return C["c_11_Ja"] + C["c_12_Ja"] * (np.log(z_value) - ln_z_ref)
-#
-#     CONSTS = {"c_10": 0.0,
-#               "c": 1.88,
-#               "n": 1.18,
-#               "delta_m": 0.1,
-#               "delta_z": 1,
-#               "Mref": 6.0,
-#               "Zref": 15,
-#               "z_b": 30,
-#               "m_b": 8.5}
-#
-#     CONSTS_Z_MODEL = {"c_z_1": 7.689368537500001,
-#                       "c_z_2": 2.302585092994046,
-#                       "c_z_3": 6.309186400000001,
-#                       "c_z_4": 0.7528670225000001}
+class KuehnEtAl2020SInterJapan(KuehnEtAl2020SInter):
+    """
+    Implements the regional interface model for Japan
+    """
+
+    #: Required site parameters are Vs30, Vs30 type (measured or inferred),
+    #: and depth (km) to the 2.5 km/s shear wave velocity layer (z2pt5)
+    REQUIRES_SITES_PARAMETERS = {'vs30', 'z2pt5'}
+
+    def get_mean_values(self, C, m_b, sites, rup, dists, a1100):
+        """
+        Returns the mean values for a specific IMT
+        """
+        if isinstance(a1100, np.ndarray):
+            # Site model defined
+            temp_vs30 = sites.vs30
+            temp_z = sites.z2pt5
+        else:
+            # Default site and basin model
+            temp_vs30 = 1100.0 * np.ones(len(sites.vs30))
+            temp_z = -1 * np.ones(len(sites.vs30))
+
+        return (self.get_base_term(C) +
+                self.get_magnitude_scaling_term(C, m_b, rup.mag) +
+                self.get_geometric_attenuation_term(C, rup.mag, dists.rrup) +
+                self.get_shallow_site_response_term(C, temp_vs30, a1100) +
+                self.get_basin_response_term(C, temp_z, temp_vs30) +
+                self.get_depth_term(C, rup.ztor) +
+                self.get_anelastic_attenuation_term(C, dists))
+
+    def get_anelastic_attenuation_term(self, C, dists):
+        """
+        Returns the anelastic attenuation term (Eq. 4.9)
+        Depends on forearc/backarc attenuation
+        Depends on arc crossing path
+        
+        backarc attenation not implemented
+        """
+        c_6 = self._get_anelastic_coeff(C)
+        return c_6 * dists.rrup
+
+    def get_base_term(self, C):
+        """
+        Returns the constant coefficient for Japan
+        """
+        return C["c_1_if_reg_Ja"]
+
+    def _get_anelastic_coeff(self, C):
+        """
+        Returns the anelastic coefficients for Japan
+        """
+        #return C[["c_6xc", "c_6_x1_reg_Ja", "c_6_x2_reg_Ja", "c_6_x3_reg_Ja",\
+        #          "c_6_1_reg_Ja", "c_6_2_reg_Ja", "c_6_3_reg_Ja"]]
+        return C["c_6_2_reg_Ja"]
+
+    def _get_linear_site_coeff(self, C):
+        """
+        Returns the linear site scaling coefficient for Japan
+        """
+        return C["c_7_reg_Ja"]
+    
+    def get_basin_response_term(self, C, z_value, vs30):
+        """
+        Returns the basin response term (Eq. 4.10)
+        Internal scale for Z2.5 is in meters
+        """
+        mask = (z_value > 0)
+        brt = np.zeros_like(z_value)
+        brt[mask] = C["c_11_Ja"] + C["c_12_Ja"] * \
+                    (np.log(z_value[mask] * 1000) - self._get_ln_z_ref(vs30[mask]))
+        return brt
+
+    CONSTS = {"c_10": 0.0,
+              "c": 1.88,
+              "n": 1.18,
+              "delta_m": 0.1,
+              "delta_z": 1,
+              "Mref": 6.0,
+              "Zref": 15,
+              "z_b": 30,
+              "m_b": 8.5,
+              "file_unc":"kuehn2020_uncertainty_if_Japan.hdf5"}
+
+    CONSTS_Z_MODEL = {"c_z_1": 7.689368537500001,
+                      "c_z_2": 2.302585092994046,
+                      "c_z_3": 6.309186400000001,
+                      "c_z_4": 0.7528670225000001}
 
 
 class KuehnEtAl2020SInterNewZealand(KuehnEtAl2020SInter):
@@ -648,7 +737,8 @@ class KuehnEtAl2020SInterNewZealand(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 8.3}
+              "m_b": 8.3,
+              "file_unc":"kuehn2020_uncertainty_if_NewZealand.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.859789675000001,
                       "c_z_2": 2.302585092994046,
@@ -656,57 +746,52 @@ class KuehnEtAl2020SInterNewZealand(KuehnEtAl2020SInter):
                       "c_z_4": 0.91563524375}
 
 
-# class KuehnEtAl2020SInterSouthAmerica(KuehnEtAl2020SInter):
-#     """
-#     Implements the regional interface model for South America
-#     """
-#
-#     #: Required distance measure is Rrup and fraction in backarc
-#     REQUIRES_DISTANCES = set(('rrup', 'alpha_backarc'))
-#
-#     def get_anelastic_attenuation_term(self, C, dists):
-#         """
-#         Returns the anelastic attenuation term (Eq. 4.9)
-#         Depends on forearc/backarc attenuation
-#         Depends on arc crossing path
-#         alpha is fraction of path in backarc
-#         """
-#         [c_6xc, c_6_x1, c_6_x2, c_6_1, c_6_2] = self._get_anelastic_coeff(C)
-#         r1 = dists.alpha_backarc * dists.rrup
-#         r2 = dists.rrup - r1
-#
-#         fx = np.ones(len(r1))
-#         fx[dists.alpha_backarc == 0] = 0
-#         fx[dists.alpha_backarc == 1] = 0
-#         return fx * (c_6xc + c_6_x1 * 1 + c_6_x2 * r2) + (1 - fx) * (c_6_1 * r1 + c_6_2 * r2)
-#
-#     def get_base_term(self, C):
-#         """
-#         Returns the constant coefficient for South America
-#         """
-#         return C["c_1_if_reg_SA"]
-#
-#     def _get_anelastic_coeff(self, C):
-#         """
-#         Returns the anelastic coefficient for South America
-#         """
-#         return C[["c_6xc", "c_6_x1_reg_SA", "c_6_x2_reg_SA", "c_6_1_reg_SA", "c_6_2_reg_SA"]]
-#
-#     def _get_linear_site_coeff(self, C):
-#         """
-#         Returns the linear site scaling coefficient for South America
-#         """
-#         return C["c_7_reg_SA"]
-#
-#     CONSTS = {"c_10": 0.0,
-#               "c": 1.88,
-#               "n": 1.18,
-#               "delta_m": 0.1,
-#               "delta_z": 1,
-#               "Mref": 6.0,
-#               "Zref": 15,
-#               "z_b": 30,
-#               "m_b": 8.6}
+class KuehnEtAl2020SInterSouthAmerica(KuehnEtAl2020SInter):
+    """
+    Implements the regional interface model for South America
+    """
+
+    def get_anelastic_attenuation_term(self, C, dists):
+        """
+        Returns the anelastic attenuation term (Eq. 4.9)
+        Depends on forearc/backarc attenuation
+        Depends on arc crossing path
+        alpha is fraction of path in backarc
+        
+        backarc atternuation is not implemented
+        """
+        c_6 = self._get_anelastic_coeff(C)
+        return c_6 * dists.rrup
+
+    def get_base_term(self, C):
+        """
+        Returns the constant coefficient for South America
+        """
+        return C["c_1_if_reg_SA"]
+
+    def _get_anelastic_coeff(self, C):
+        """
+        Returns the anelastic coefficient for South America
+        """
+        #return C[["c_6xc", "c_6_x1_reg_SA", "c_6_x2_reg_SA", "c_6_1_reg_SA", "c_6_2_reg_SA"]]
+        return C["c_6_2_reg_SA"]
+
+    def _get_linear_site_coeff(self, C):
+        """
+        Returns the linear site scaling coefficient for South America
+        """
+        return C["c_7_reg_SA"]
+
+    CONSTS = {"c_10": 0.0,
+              "c": 1.88,
+              "n": 1.18,
+              "delta_m": 0.1,
+              "delta_z": 1,
+              "Mref": 6.0,
+              "Zref": 15,
+              "z_b": 30,
+              "m_b": 8.6,
+              "file_unc":"kuehn2020_uncertainty_if_SouthAmerica.hdf5"}
 
 
 class KuehnEtAl2020SInterTaiwan(KuehnEtAl2020SInter):
@@ -775,7 +860,8 @@ class KuehnEtAl2020SInterTaiwan(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 15,
               "z_b": 30,
-              "m_b": 7.1}
+              "m_b": 7.1,
+              "file_unc":"kuehn2020_uncertainty_if_Taiwan.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.30560665,
                       "c_z_2": 2.302585092994046,
@@ -839,7 +925,8 @@ class KuehnEtAl2020SSlab(KuehnEtAl2020SInter):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.6}
+              "m_b": 7.6,
+              "file_unc":"kuehn2020_uncertainty_slab_Global.hdf5"}
 
 class KuehnEtAl2020SSlabAlaska(KuehnEtAl2020SSlab):
     """
@@ -872,7 +959,8 @@ class KuehnEtAl2020SSlabAlaska(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.2}
+              "m_b": 7.2,
+              "file_unc":"kuehn2020_uncertainty_slab_Alaska.hdf5"}
 
 class KuehnEtAl2020SSlabCascadia(KuehnEtAl2020SSlab):
     """
@@ -924,11 +1012,12 @@ class KuehnEtAl2020SSlabCascadia(KuehnEtAl2020SSlab):
     def get_basin_response_term(self, C, z_value, vs30):
         """
         Returns the basin response term (Eq. 4.10)
+        Internal scale for Z2.5 is in meters
         """
         mask = (z_value > 0)
         brt = np.zeros_like(z_value)
         brt[mask] = C["c_11_Ca"] + C["c_12_Ca"] * \
-                    (np.log(z_value[mask]) - self._get_ln_z_ref(vs30[mask]))
+                    (np.log(z_value[mask] * 1000.) - self._get_ln_z_ref(vs30[mask]))
         return brt
 
     CONSTS = {"c_10": 0.0,
@@ -939,159 +1028,147 @@ class KuehnEtAl2020SSlabCascadia(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.2}
+              "m_b": 7.2,
+              "file_unc":"kuehn2020_uncertainty_slab_Cascadia.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 8.294049640102028,
                       "c_z_2": 2.302585092994046,
                       "c_z_3": 6.396929655216146,
                       "c_z_4": 0.27081458999999997}
 
-# class KuehnEtAl2020SSlabCentralAmericaMexico(KuehnEtAl2020SSlab):
-#     """
-#     Implements the regional intraslab model for Central America and Mexico
-#     """
-#
-#     #: Required distance measure is Rrup and fraction in backarc
-#     REQUIRES_DISTANCES = set(('rrup', 'alpha_backarc'))
-#
-#     def get_anelastic_attenuation_term(self, C, dists):
-#         """
-#         Returns the anelastic attenuation term (Eq. 4.9)
-#         Depends on forearc/backarc attenuation
-#         Depends on arc crossing path
-#         alpha is fraction of path in backarc
-#         """
-#         [c_6xc, c_6_x1, c_6_x2, c_6_1, c_6_2] = self._get_anelastic_coeff(C)
-#         r1 = dists.alpha_backarc * dists.rrup
-#         r2 = dists.rrup - r1
-#
-#         fx = np.ones(len(r1))
-#         fx[dists.alpha_backarc == 0] = 0
-#         fx[dists.alpha_backarc == 1] = 0
-#         return fx * (c_6xc + c_6_x1 * 1 + c_6_x2 * r2) + (1 - fx) * (c_6_1 * r1 + c_6_2 * r2)
-#
-#     def get_base_term(self, C):
-#         """
-#         Returns the constant coefficient for Central America and Mexico
-#         """
-#         return C["c_1_slab_reg_CAM"]
-#
-#     def _get_anelastic_coeff(self, C):
-#         """
-#         Returns the anelastic coefficient for Central America and Mexico
-#         """
-#         return C[["c_6xc", "c_6_x1_reg_CAM", "c_6_x2_reg_CAM", "c_6_1_reg_CAM", "c_6_2_reg_CAM"]]
-#
-#     def _get_linear_site_coeff(self, C):
-#         """
-#         Returns the linear site scaling coefficient for Central America and Mexico
-#         """
-#         return C["c_7_reg_CAM"]
-#
-#     CONSTS = {"c_10": 0.0,
-#               "c": 1.88,
-#               "n": 1.18,
-#               "delta_m": 0.1,
-#               "delta_z": 1,
-#               "Mref": 6.0,
-#               "Zref": 50,
-#               "z_b": 80,
-#               "m_b": 7.4}
 
-# class KuehnEtAl2020SSlabJapan(KuehnEtAl2020SSlab):
-#     """
-#     Implements the regional intraslab model for Japan
-#     """
-#
-#     #: Required site parameters are Vs30, Vs30 type (measured or inferred),
-#     #: and depth (km) to the 2.5 km/s shear wave velocity layer (z2pt5)
-#     REQUIRES_SITES_PARAMETERS = {'vs30', 'z2pt5'}
-#
-#     #: Required distance measure is Rrup and fraction in backarc
-#     #: and fraction in Nankai region
-#     REQUIRES_DISTANCES = set(('rrup', 'alpha_backarc', 'alpha_nankai'))
-#
-#     def get_mean_values(self, C, m_b, sites, rup, dists, a1100):
-#         """
-#         Returns the mean values for a specific IMT
-#         """
-#         if isinstance(a1100, np.ndarray):
-#             # Site model defined
-#             temp_vs30 = sites.vs30
-#             temp_z = sites.z2pt5
-#         else:
-#             # Default site and basin model
-#             temp_vs30 = 1100.0 * np.ones(len(sites.vs30))
-#             temp_z = -1 * np.ones(len(sites.vs30))
-#
-#         return (self.get_base_term(C) +
-#                 self.get_magnitude_scaling_term(C, m_b, rup.mag) +
-#                 self.get_geometric_attenuation_term(C, rup.mag, dists.rrup) +
-#                 self.get_shallow_site_response_term(C, temp_vs30, a1100) +
-#                 self.get_basin_response_term(C, temp_z, temp_vs30) +
-#                 self.get_depth_term(C, rup.ztor) +
-#                 self.get_anelastic_attenuation_term(C, dists))
-#
-#     def get_anelastic_attenuation_term(self, C, dists):
-#         """
-#         Returns the anelastic attenuation term (Eq. 4.9)
-#         Depends on forearc/backarc attenuation
-#         Depends on arc crossing path
-#         """
-#         [c_6xc, c_6_x1, c_6_x2, c_6_x3, c_6_1, c_6_2, c_6_3] = self._get_anelastic_coeff(C)
-#         r1 = dists.alpha_backarc * dists.rrup
-#         r3 = dists.alpha_nankai * dists.rrup
-#         r2 = rrup - r1 - r3
-#
-#         # NEEDS WORK
-#         fx = np.ones(len(r1))
-#         fx[dists.alpha_backarc == 0] = 0
-#         fx[dists.alpha_backarc == 1] = 0
-#         return fx * (c_6xc + c_6_x1 * 1 + c_6_x2 * r2 + c_6_x3 * r3) + (1 - fx) * (c_6_1 * r1 + c_6_2 * r2 + c_6_3 * r3)
-#
-#     def get_base_term(self, C):
-#         """
-#         Returns the constant coefficient for Japan
-#         """
-#         return C["c_1_slab_reg_Ja"]
-#
-#     def _get_anelastic_coeff(self, C):
-#         """
-#         Returns the anelastic coefficients for Japan
-#         """
-#         return C[["c_6xc", "c_6_x1_reg_Ja", "c_6_x2_reg_Ja", "c_6_x3_reg_Ja",\
-#                   "c_6_1_reg_Ja", "c_6_2_reg_Ja", "c_6_3_reg_Ja"]]
-#
-#     def _get_linear_site_coeff(self, C):
-#         """
-#         Returns the linear site scaling coefficient for Japan
-#         """
-#         return C["c_7_reg_Ja"]
-#
-#     def get_basin_response_term(self, C, z_value, vs30):
-#         """
-#         Returns the basin response term (Eq. 4.10)
-#         """
-#        if (z_value <= 0):
-#            return 0.
-#        else:
-#            ln_z_ref = self._get_ln_z_ref(vs30)
-#            return C["c_11_Ja"] + C["c_12_Ja"] * (np.log(z_value) - ln_z_ref)
-#
-#     CONSTS = {"c_10": 0.0,
-#               "c": 1.88,
-#               "n": 1.18,
-#               "delta_m": 0.1,
-#               "delta_z": 1,
-#               "Mref": 6.0,
-#               "Zref": 50,
-#               "z_b": 80,
-#               "m_b": 7.6}
-#
-#     CONSTS_Z_MODEL = {"c_z_1": 7.689368537500001,
-#                       "c_z_2": 2.302585092994046,
-#                       "c_z_3": 6.309186400000001,
-#                       "c_z_4": 0.7528670225000001}
+class KuehnEtAl2020SSlabCentralAmericaMexico(KuehnEtAl2020SSlab):
+    """
+    Implements the regional intraslab model for Central America and Mexico
+    """
+
+    def get_anelastic_attenuation_term(self, C, dists):
+        """
+        Returns the anelastic attenuation term (Eq. 4.9)
+        Depends on forearc/backarc attenuation
+        Depends on arc crossing path
+        alpha is fraction of path in backarc
+        
+        backarc attenuation is not implemented
+        """
+        c_6 = self._get_anelastic_coeff(C)
+        return c_6 * dists.rrup
+
+    def get_base_term(self, C):
+        """
+        Returns the constant coefficient for Central America and Mexico
+        """
+        return C["c_1_slab_reg_CAM"]
+
+    def _get_anelastic_coeff(self, C):
+        """
+        Returns the anelastic coefficient for Central America and Mexico
+        """
+        #return C[["c_6xc", "c_6_x1_reg_CAM", "c_6_x2_reg_CAM", "c_6_1_reg_CAM", "c_6_2_reg_CAM"]]
+        return C["c_6_2_reg_CAM"]
+
+    def _get_linear_site_coeff(self, C):
+        """
+        Returns the linear site scaling coefficient for Central America and Mexico
+        """
+        return C["c_7_reg_CAM"]
+
+    CONSTS = {"c_10": 0.0,
+              "c": 1.88,
+              "n": 1.18,
+              "delta_m": 0.1,
+              "delta_z": 1,
+              "Mref": 6.0,
+              "Zref": 50,
+              "z_b": 80,
+              "m_b": 7.4,
+              "file_unc":"kuehn2020_uncertainty_slab_CentralAmericaMexico.hdf5"}
+
+class KuehnEtAl2020SSlabJapan(KuehnEtAl2020SSlab):
+    """
+    Implements the regional intraslab model for Japan
+    """
+
+    #: Required site parameters are Vs30, Vs30 type (measured or inferred),
+    #: and depth (km) to the 2.5 km/s shear wave velocity layer (z2pt5)
+    REQUIRES_SITES_PARAMETERS = {'vs30', 'z2pt5'}
+
+    def get_mean_values(self, C, m_b, sites, rup, dists, a1100):
+        """
+        Returns the mean values for a specific IMT
+        """
+        if isinstance(a1100, np.ndarray):
+            # Site model defined
+            temp_vs30 = sites.vs30
+            temp_z = sites.z2pt5
+        else:
+            # Default site and basin model
+            temp_vs30 = 1100.0 * np.ones(len(sites.vs30))
+            temp_z = -1 * np.ones(len(sites.vs30))
+
+        return (self.get_base_term(C) +
+                self.get_magnitude_scaling_term(C, m_b, rup.mag) +
+                self.get_geometric_attenuation_term(C, rup.mag, dists.rrup) +
+                self.get_shallow_site_response_term(C, temp_vs30, a1100) +
+                self.get_basin_response_term(C, temp_z, temp_vs30) +
+                self.get_depth_term(C, rup.ztor) +
+                self.get_anelastic_attenuation_term(C, dists))
+
+    def get_anelastic_attenuation_term(self, C, dists):
+        """
+        Returns the anelastic attenuation term (Eq. 4.9)
+        Depends on forearc/backarc attenuation
+        Depends on arc crossing path
+        """
+        c_6 = self._get_anelastic_coeff(C)
+        return c_6 * dists.rrup
+
+    def get_base_term(self, C):
+        """
+        Returns the constant coefficient for Japan
+        """
+        return C["c_1_slab_reg_Ja"]
+
+    def _get_anelastic_coeff(self, C):
+        """
+        Returns the anelastic coefficients for Japan
+        """
+        #return C[["c_6xc", "c_6_x1_reg_Ja", "c_6_x2_reg_Ja", "c_6_x3_reg_Ja",\
+        #          "c_6_1_reg_Ja", "c_6_2_reg_Ja", "c_6_3_reg_Ja"]]
+        return C["c_6_2_reg_Ja"]
+
+    def _get_linear_site_coeff(self, C):
+        """
+        Returns the linear site scaling coefficient for Japan
+        """
+        return C["c_7_reg_Ja"]
+    
+    def get_basin_response_term(self, C, z_value, vs30):
+        """
+        Returns the basin response term (Eq. 4.10)
+        Internal scale for Z2.5 is in meters
+        """
+        mask = (z_value > 0)
+        brt = np.zeros_like(z_value)
+        brt[mask] = C["c_11_Ja"] + C["c_12_Ja"] * \
+                    (np.log(z_value[mask] * 1000.) - self._get_ln_z_ref(vs30[mask]))
+        return brt
+
+    CONSTS = {"c_10": 0.0,
+              "c": 1.88,
+              "n": 1.18,
+              "delta_m": 0.1,
+              "delta_z": 1,
+              "Mref": 6.0,
+              "Zref": 50,
+              "z_b": 80,
+              "m_b": 7.6,
+              "file_unc":"kuehn2020_uncertainty_slab_Japan.hdf5"}
+
+    CONSTS_Z_MODEL = {"c_z_1": 7.689368537500001,
+                      "c_z_2": 2.302585092994046,
+                      "c_z_3": 6.309186400000001,
+                      "c_z_4": 0.7528670225000001}
 
 
 class KuehnEtAl2020SSlabNewZealand(KuehnEtAl2020SSlab):
@@ -1160,64 +1237,60 @@ class KuehnEtAl2020SSlabNewZealand(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.6}
+              "m_b": 7.6,
+              "file_unc":"kuehn2020_uncertainty_slab_NewZealand.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.859789675000001,
                       "c_z_2": 2.302585092994046,
                       "c_z_3": 5.745692775,
                       "c_z_4": 0.91563524375}
 
-# class KuehnEtAl2020SSlabSouthAmerica(KuehnEtAl2020SSlab):
-#     """
-#     Implements the regional intraslab model for South America
-#     """
-#
-#     #: Required distance measure is Rrup and fraction in backarc
-#     REQUIRES_DISTANCES = set(('rrup', 'alpha_backarc'))
-#
-#     def get_anelastic_attenuation_term(self, C, dists):
-#         """
-#         Returns the anelastic attenuation term (Eq. 4.9)
-#         Depends on forearc/backarc attenuation
-#         Depends on arc crossing path
-#         alpha is fraction of path in backarc
-#         """
-#         [c_6xc, c_6_x1, c_6_x2, c_6_1, c_6_2] = self._get_anelastic_coeff(C)
-#         r1 = dists.alpha_backarc * dists.rrup
-#         r2 = dists.rrup - r1
-#
-#         fx = np.ones(len(r1))
-#         fx[dists.alpha_backarc == 0] = 0
-#         fx[dists.alpha_backarc == 1] = 0
-#         return fx * (c_6xc + c_6_x1 * 1 + c_6_x2 * r2) + (1 - fx) * (c_6_1 * r1 + c_6_2 * r2)
-#
-#     def get_base_term(self, C):
-#         """
-#         Returns the constant coefficient for South America
-#         """
-#         return C["c_1_slab_reg_SA"]
-#
-#     def _get_anelastic_coeff(self, C):
-#         """
-#         Returns the anelastic coefficient for South America
-#         """
-#         return C[["c_6_x1_reg_SA", "c_6_x2_reg_SA", "c_6_1_reg_SA", "c_6_2_reg_SA"]]
-#
-#     def _get_linear_site_coeff(self, C):
-#         """
-#         Returns the linear site scaling coefficient for South America
-#         """
-#         return C["c_7_reg_SA"]
-#
-#     CONSTS = {"c_10": 0.0,
-#               "c": 1.88,
-#               "n": 1.18,
-#               "delta_m": 0.1,
-#               "delta_z": 1,
-#               "Mref": 6.0,
-#               "Zref": 50,
-#               "z_b": 80,
-#               "m_b": 7.3}
+class KuehnEtAl2020SSlabSouthAmerica(KuehnEtAl2020SSlab):
+    """
+    Implements the regional intraslab model for South America
+    """
+
+    def get_anelastic_attenuation_term(self, C, dists):
+        """
+        Returns the anelastic attenuation term (Eq. 4.9)
+        Depends on forearc/backarc attenuation
+        Depends on arc crossing path
+        alpha is fraction of path in backarc
+        
+        anelastic attenuation is not implemented
+        """
+        c_6 = self._get_anelastic_coeff(C)
+        return c_6 * dists.rrup
+
+    def get_base_term(self, C):
+        """
+        Returns the constant coefficient for South America
+        """
+        return C["c_1_slab_reg_SA"]
+
+    def _get_anelastic_coeff(self, C):
+        """
+        Returns the anelastic coefficient for South America
+        """
+        #return C[["c_6_x1_reg_SA", "c_6_x2_reg_SA", "c_6_1_reg_SA", "c_6_2_reg_SA"]]
+        return C["c_6_2_reg_SA"]
+
+    def _get_linear_site_coeff(self, C):
+        """
+        Returns the linear site scaling coefficient for South America
+        """
+        return C["c_7_reg_SA"]
+
+    CONSTS = {"c_10": 0.0,
+              "c": 1.88,
+              "n": 1.18,
+              "delta_m": 0.1,
+              "delta_z": 1,
+              "Mref": 6.0,
+              "Zref": 50,
+              "z_b": 80,
+              "m_b": 7.3,
+              "file_unc":"kuehn2020_uncertainty_slab_SouthAmerica.hdf5"}
 
 
 class KuehnEtAl2020SSlabTaiwan(KuehnEtAl2020SSlab):
@@ -1286,7 +1359,8 @@ class KuehnEtAl2020SSlabTaiwan(KuehnEtAl2020SSlab):
               "Mref": 6.0,
               "Zref": 50,
               "z_b": 80,
-              "m_b": 7.7}
+              "m_b": 7.7,
+              "file_unc":"kuehn2020_uncertainty_slab_Taiwan.hdf5"}
 
     CONSTS_Z_MODEL = {"c_z_1": 6.30560665,
                       "c_z_2": 2.302585092994046,
