@@ -578,6 +578,22 @@ class PlanarSurface(BaseSurface):
         dst[idx] = numpy.fmin(numpy.abs(dst1[idx]), numpy.abs(dst2[idx]))
         return dst
 
+    def get_generalised_coordinates(self, lons, lats):
+        """
+        Returns the generalised coordinates (GC-T and GC-U). For a simple
+        planar fault the GC-T and GC-U coordinates are equivalent to the
+        distance to the arc described by the top edge and a line parallel to
+        the top edge
+        """
+        gc2t = geodetic.distance_to_arc(
+            self.corner_lons[0], self.corner_lats[0], self.strike, lons, lats)
+        
+        gc2u = -geodetic.distance_to_arc(self.top_left.longitude,
+                                         self.top_left.latitude,
+                                         (self.strike + 90.) % 360,
+                                         lons, lats)
+        return gc2t, gc2u
+
     def get_width(self):
         """
         Return surface's width value (in km) as computed in the constructor
@@ -634,3 +650,25 @@ class PlanarSurface(BaseSurface):
         return (self.corner_lons.take([0, 1, 3, 2, 0]),
                 self.corner_lats.take([0, 1, 3, 2, 0]),
                 self.corner_depths.take([0, 1, 3, 2, 0]))
+
+    def get_hypo_location(self, mesh_spacing, hypo_loc=None):
+        """
+        Determines the location of the hypocentre within the rupture
+        """
+        if hypo_loc is None:
+            # Return the middle point
+            return self.get_middle_point()
+
+        ddip_dir = (self.strike + 90.) % 360.
+        as_pos, ddip_pos = hypo_loc
+        as_pnt = self.top_left.point_at(as_pos * self.length, 0., self.strike)
+        dz = self.bottom_right.depth - self.top_right.depth
+        if numpy.fabs(self.dip - 90.0) < 1.0E-5:
+            # Vertical rupture - so simply shift the point downward
+            return as_pnt.point_at(0., ddip_pos * dz, 0.)
+        else:
+            dw = ddip_pos * self.width
+            dip = numpy.radians(self.dip)
+            return as_pnt.point_at(dw * numpy.cos(dip),
+                                   dw * numpy.sin(dip),
+                                   ddip_dir)

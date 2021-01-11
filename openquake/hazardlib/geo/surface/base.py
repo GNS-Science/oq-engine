@@ -278,6 +278,17 @@ class BaseSurface:
             return 0
         else:
             return numpy.min(top_edge.depths)
+    
+    def get_bottom_edge_depth(self):
+        """
+        Return maximum depth of surface's bottom edge.
+
+        :returns:
+            Float value, the vertical distance between the earth surface
+            and the deepest point in surface's bottom edge in km.
+        """
+        bottom_edge = self.mesh[-2:-1]
+        return numpy.max(bottom_edge.depths)
 
     def _get_top_edge_centroid(self):
         """

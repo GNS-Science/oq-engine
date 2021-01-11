@@ -398,6 +398,8 @@ def get_source_attributes(source):
         Dictionary of source attributes
     """
     attrs = {"id": source.source_id, "name": source.name}
+    if source.apply_directivity:
+        attrs["apply_directivity"] = "True"
     if isinstance(source, NonParametricSeismicSource):
         if source.data[0][0].weight is not None:
             weights = []
@@ -432,6 +434,15 @@ def build_characteristic_fault_source_node(source):
     source_nodes.append(Node("rake", text=source.rake))
     surface_node = Node('surface', nodes=source.surface.surface_nodes)
     source_nodes.append(surface_node)
+    if len(source.hypo_dist.hypo_pos):
+        hypo_dist = []
+        for (als, ddip), prob in zip(source.hypo_dist.hypo_pos,
+                                     source.hypo_dist.hypo_probs):
+            hypo_dist.append([als, ddip, prob])
+        source_nodes.append(build_hypo_list_node(hypo_dist))
+    if len(source.hypo_dist.slip_list):
+        source_nodes.append(
+            build_slip_list_node(source.slip_list))
     return Node('characteristicFaultSource',
                 get_source_attributes(source),
                 nodes=source_nodes)

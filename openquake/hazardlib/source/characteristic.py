@@ -19,7 +19,8 @@ Module :mod:`openquake.hazardlib.source.characteristic` defines
 """
 from openquake.hazardlib.source.base import ParametricSeismicSource
 from openquake.hazardlib.geo import NodalPlane
-from openquake.hazardlib.source.rupture import ParametricProbabilisticRupture
+from openquake.hazardlib.source.rupture import (ParametricProbabilisticRupture,
+                                                RuptureHypocenterDistribution)
 from openquake.hazardlib.geo.utils import angular_distance, KM_TO_DEGREES
 
 
@@ -56,13 +57,15 @@ class CharacteristicFaultSource(ParametricSeismicSource):
 
     def __init__(self, source_id, name, tectonic_region_type,
                  mfd, temporal_occurrence_model, surface, rake,
-                 surface_node=None):
+                 surface_node=None, hypo_list=(), slip_list=(),
+                 apply_directivity=False):
         super().__init__(
             source_id, name, tectonic_region_type, mfd, None, None, None,
-            temporal_occurrence_model)
+            temporal_occurrence_model, apply_directivity)
         NodalPlane.check_rake(rake)
         self.surface = surface
         self.rake = rake
+        self.hypo_dist = RuptureHypocenterDistribution(hypo_list, slip_list)
 
     def get_bounding_box(self, maxdist):
         """
@@ -90,18 +93,27 @@ class CharacteristicFaultSource(ParametricSeismicSource):
         For each magnitude value in the given MFD, return an earthquake
         rupture with a surface always equal to the given surface.
         """
-        hypocenter = self.surface.get_middle_point()
+        # In this particular case the rupture surface (and therefore the
+        # hypocentre distribution) is independent of the magnitude
+        if "_setup_gc2_framework" in dir(self.surface):
+            # AS the rupture surface is fixed then we only need to run the
+            # GC2 setup once
+            self.surface._setup_gc2_framework()
         for mag, occurrence_rate in self.get_annual_occurrence_rates():
-            yield ParametricProbabilisticRupture(
-                mag, self.rake, self.tectonic_region_type, hypocenter,
-                self.surface, occurrence_rate, self.temporal_occurrence_model)
+            for hypocenter, slip_direction, hypo_prob in\
+                    self.hypo_dist.get_parameters_probabilities(self.surface):
+                yield ParametricProbabilisticRupture(
+                    mag, self.rake, self.tectonic_region_type, hypocenter,
+                    self.surface, occurrence_rate * hypo_prob,
+                    self.temporal_occurrence_model, slip_direction,
+                    self.apply_directivity)
 
     def count_ruptures(self):
         """
         See :meth:
         `openquake.hazardlib.source.base.BaseSeismicSource.count_ruptures`.
         """
-        return len(self.get_annual_occurrence_rates())
+        return len(self.get_annual_occurrence_rates()) * len(self.hypo_dist)
 
     def modify_set_geometry(self, surface, surface_node=None):
         """

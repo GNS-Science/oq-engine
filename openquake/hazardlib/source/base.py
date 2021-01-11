@@ -273,7 +273,8 @@ class ParametricSeismicSource(BaseSeismicSource, metaclass=abc.ABCMeta):
     """
     def __init__(self, source_id, name, tectonic_region_type, mfd,
                  rupture_mesh_spacing, magnitude_scaling_relationship,
-                 rupture_aspect_ratio, temporal_occurrence_model):
+                 rupture_aspect_ratio, temporal_occurrence_model,
+                 apply_directivity=False):
         super().__init__(source_id, name, tectonic_region_type)
 
         if rupture_mesh_spacing is not None and not rupture_mesh_spacing > 0:
@@ -287,6 +288,7 @@ class ParametricSeismicSource(BaseSeismicSource, metaclass=abc.ABCMeta):
         self.magnitude_scaling_relationship = magnitude_scaling_relationship
         self.rupture_aspect_ratio = rupture_aspect_ratio
         self.temporal_occurrence_model = temporal_occurrence_model
+        self.apply_directivity = apply_directivity
 
     def get_annual_occurrence_rates(self, min_rate=0):
         """

@@ -78,6 +78,27 @@ def get_distances(rupture, sites, param):
         dist = numpy.array([(lo, la, de) for lo, la, de in zip(t.lons,
                                                                t.lats,
                                                                t.depths)])
+    elif param in ("gc2t", "gc2u"):
+        # Needs both gc2t and gc2u. If rx and ry0 have been required then
+        # these are already computed and stored as attributes of the rupture
+        # surface.
+        if hasattr(rupture.surface, param) and\
+            getattr(rupture.surface, param) is not None:
+            # For multi-segment ruptures, gc2t and gc2u have already been
+            # computed, so retrieve them
+            dist = getattr(rupture.surface, param)
+        else:
+            # For planar ruptures then it is faster to computer gc2t and gc2u
+            # on the fly
+            try:
+                gc2t, gc2u = rupture.surface.get_generalised_coordinates(
+                    sites.mesh.lons, sites.mesh.lats)
+                if param == "gc2t":
+                    dist = gc2t
+                else:
+                    dist = gc2u
+            except:
+                dist = numpy.array([])
     elif param == "rvolc":
         # Volcanic distance not yet supported, defaulting to zero
         dist = numpy.zeros_like(sites.lons)
@@ -116,7 +137,7 @@ def _make_pmap(ctxs, cmaker):
 
 def read_ctxs(dstore, slc=slice(None), req_site_params=None):
     """
-     :returns: a list of contexts
+    :returns: a list of contexts
     """
     sitecol = dstore['sitecol'].complete
     site_params = {par: sitecol[par]
@@ -303,14 +324,42 @@ class ContextMaker(object):
                 value = rupture.rake
             elif param == 'ztor':
                 value = rupture.surface.get_top_edge_depth()
+            elif param == 'zbor':
+                value = rupture.surface.get_bottom_edge_depth()
             elif param == 'hypo_lon':
                 value = rupture.hypocenter.longitude
             elif param == 'hypo_lat':
                 value = rupture.hypocenter.latitude
             elif param == 'hypo_depth':
                 value = rupture.hypocenter.depth
+            elif param == 'hypo_loc':
+                value = rupture.hypo_loc
             elif param == 'width':
                 value = rupture.surface.get_width()
+            elif param == 'apply_directivity':
+                value = rupture.apply_directivity
+            elif param == "gc_length":
+                if hasattr(rupture.surface, "gc_length"):
+                    value = rupture.surface.gc_length
+                else:
+                    value = rupture.surface.length
+            elif param in ("gc2t_hypo", "gc2u_hypo"):
+                if not hasattr(rupture, param):
+                    gc2t_hypo, gc2u_hypo = rupture.hypocenter.get_gc2_point(
+                        rupture.surface)
+                    setattr(rupture, "gc2t_hypo", gc2t_hypo)
+                    setattr(rupture, "gc2u_hypo", gc2u_hypo)
+                value = getattr(rupture, param)
+            elif param in ("gc2t_updip_hypo", "gc2u_updip_hypo"):
+                # Get the up-dip projection of the hypocentre
+                if not hasattr(rupture, param):
+                    updip_proj_hypo = rupture.hypocenter.project_updip(
+                        rupture.surface) 
+                    gc2t_updip, gc2u_updip = updip_proj_hypo.get_gc2_point(
+                        rupture.surface)
+                    setattr(rupture, "gc2t_updip_hypo", gc2t_updip)
+                    setattr(rupture, "gc2u_updip_hypo", gc2u_updip)
+                value = getattr(rupture, param)
             else:
                 raise ValueError('%s requires unknown rupture parameter %r' %
                                  (type(self).__name__, param))

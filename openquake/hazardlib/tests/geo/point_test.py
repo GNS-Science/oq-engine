@@ -373,3 +373,90 @@ class DistanceToMeshTestCase(unittest.TestCase):
         distances = p.distance_to_mesh(mesh)
         ed = [0., 1., 2., 3.]
         numpy.testing.assert_array_almost_equal(distances, ed)
+
+
+class ProjectUpdipTestCase(unittest.TestCase):
+
+    def test_vertical_planar_case(self):
+        top_left = geo.Point(0.0, 0.0, 0.0)
+        top_right = geo.Point(0.0, 0.1, 0.0)
+        bottom_right = geo.Point(0.0, 0.1, 10.)
+        bottom_left = geo.Point(0.0, 0.0, 10.0)
+        plane = geo.PlanarSurface.from_corner_points(top_left, top_right,
+                                                 bottom_right, bottom_left)
+        input_point = geo.Point(0.0, 0.05, 5.0)
+        project_updip = input_point.project_updip(plane)
+        self.assertAlmostEqual(project_updip.longitude, 0.0)
+        self.assertAlmostEqual(project_updip.latitude, 0.05)
+        self.assertAlmostEqual(project_updip.depth, 0.0)
+
+    def test_dipping_planar_case(self):
+        top_left = geo.Point(0.0, 0.0, 1.0)
+        top_right = geo.Point(0.0, 0.1, 1.0)
+        bottom_right = geo.Point(0.05, 0.1, 11.0)
+        bottom_left = geo.Point(0.05, 0.0, 11.0)
+        plane = geo.PlanarSurface.from_corner_points(top_left, top_right,
+                                                     bottom_right, bottom_left)
+
+        input_point = geo.Point(0.0, 0.05, 5.0)
+        project_updip = input_point.project_updip(plane)
+        self.assertAlmostEqual(project_updip.longitude, -0.0250)
+        self.assertAlmostEqual(project_updip.latitude, 0.0500)
+        self.assertAlmostEqual(project_updip.depth, 0.0)
+
+    def test_dipping_multiplanar_case(self):
+        # Plane 1
+        top_left = geo.Point(0.0, 0.0, 1.0)
+        top_right = geo.Point(0.0, 0.1, 1.0)
+        bottom_right = geo.Point(0.05, 0.1, 11.0)
+        bottom_left = geo.Point(0.05, 0.0, 11.0)
+        plane1 = geo.PlanarSurface.from_corner_points(top_left, top_right,
+                                                      bottom_right, bottom_left)
+        # Plane 2
+        top_left2 = geo.Point(0.0, 0.1, 1.0)
+        top_right2 = top_left2.point_at(5., 0., 30.)
+        bottom_right2 = top_right2.point_at(5.0, 10.0, 90.)
+        bottom_left2 = top_left2.point_at(5., 10., 90.)
+        plane2 = geo.PlanarSurface.from_corner_points(top_left2, top_right2,
+                                                      bottom_right2,
+                                                      bottom_left2)
+        multi1 = geo.MultiSurface([plane1, plane2])
+
+        input_point = geo.Point(0.0, 0.05, 5.0)
+        project_updip = input_point.project_updip(multi1)
+        self.assertAlmostEqual(project_updip.longitude, -0.023943, 5)
+        self.assertAlmostEqual(project_updip.latitude, 0.053740, 5)
+        self.assertAlmostEqual(project_updip.depth, 0.0, 7)
+
+
+class GC2PointTestCase(unittest.TestCase):
+
+    def test_vertical_planar_case(self):
+        top_left = geo.Point(0.0, 0.0, 0.0)
+        top_right = geo.Point(0.0, 0.1, 0.0)
+        bottom_right = geo.Point(0.0, 0.1, 10.)
+        bottom_left = geo.Point(0.0, 0.0, 10.0)
+        plane = geo.PlanarSurface.from_corner_points(top_left, top_right,
+                                                 bottom_right, bottom_left)
+        input_point = geo.Point(0.05, 0.05, 5.0)
+        # Target distance for both GC2-T and GC2-U ordinate is 0.05 deg in km
+        dx = top_left.distance(geo.Point(0.0, 0.05, 0.0))
+        gc2t, gc2u = input_point.get_gc2_point(plane)
+        self.assertAlmostEqual(gc2t, dx, 5)
+        self.assertAlmostEqual(gc2u, dx, 5)
+
+    def test_dipping_planar_case(self):
+        # GC2 coordinates should be same as for the vertical test case
+        top_left = geo.Point(0.0, 0.0, 1.0)
+        top_right = geo.Point(0.0, 0.1, 1.0)
+        bottom_right = geo.Point(0.05, 0.1, 11.0)
+        bottom_left = geo.Point(0.05, 0.0, 11.0)
+        plane = geo.PlanarSurface.from_corner_points(top_left, top_right,
+                                                     bottom_right, bottom_left)
+
+        input_point = geo.Point(0.05, 0.05, 5.0)
+        # Target distance for both GC2-T and GC2-U ordinate is 0.05 deg in km
+        dx = top_left.distance(geo.Point(0.0, 0.05, 1.0))
+        gc2t, gc2u = input_point.get_gc2_point(plane)
+        self.assertAlmostEqual(gc2t, dx, 5)
+        self.assertAlmostEqual(gc2u, dx, 5)

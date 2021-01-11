@@ -649,3 +649,27 @@ class MultiSurface(BaseSurface):
         pos_gc2u = self.gc2u >= self.gc_length
         ry0[pos_gc2u] = self.gc2u[pos_gc2u] - self.gc_length
         return ry0
+
+    def get_hypo_location(self, mesh_spacing, hypo_loc=None):
+        """
+        For a multi-segement rupture the location of the hypocentre is
+        more complex
+        """
+        if len(self.surfaces) == 1:
+            return self.surfaces[0].get_hypo_location(mesh_spacing, hypo_loc)
+        # Need to determine on which surface the hypocentre occurs
+        segment_lengths = numpy.array([sfc.length for sfc in self.surfaces])
+        cum_length = numpy.cumsum(segment_lengths) / numpy.sum(segment_lengths)
+        iloc = numpy.searchsorted(cum_length, hypo_loc[0])
+        # The hypocentre is on the ith segment, so need to determine the
+        # relative position within the segment
+        if iloc == 0:
+            # The hypocentre occurs on the first segment
+            tloc = hypo_loc[0] / cum_length[0]
+        else:
+            tloc = (hypo_loc[0] - cum_length[iloc - 1]) /\
+                (cum_length[iloc] - cum_length[iloc - 1])
+        # Return the hypocentre within the plane
+        hypocentre = self.surfaces[iloc].get_hypo_location(mesh_spacing,
+                                                           (tloc, hypo_loc[1]))
+        return hypocentre

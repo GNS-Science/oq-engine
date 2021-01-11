@@ -21,7 +21,8 @@ from openquake.hazardlib.geo import Point, Line
 from openquake.hazardlib.geo.surface.planar import PlanarSurface
 from openquake.hazardlib.tom import PoissonTOM
 from openquake.hazardlib.source.rupture import BaseRupture, \
-    ParametricProbabilisticRupture, NonParametricProbabilisticRupture
+    ParametricProbabilisticRupture, NonParametricProbabilisticRupture,\
+    RuptureHypocenterDistribution
 from openquake.hazardlib.pmf import PMF
 from openquake.hazardlib.geo.mesh import Mesh
 from openquake.hazardlib.geo.surface.simple_fault import SimpleFaultSurface
@@ -260,3 +261,205 @@ class NonParametricProbabilisticRuptureTestCase(unittest.TestCase):
         self.assertAlmostEqual(p_occs_0, 0.7, places=2)
         self.assertAlmostEqual(p_occs_1, 0.2, places=2)
         self.assertAlmostEqual(p_occs_2, 0.1, places=2)
+
+class RuptureHypocenterDistributionTestCase(unittest.TestCase):
+
+    def setUp(self):
+        # Use a simple vertical planar rupture
+        top_left = Point(0.0, 0.0, 0.0)
+        top_right = Point(0.0, 0.1, 0.0)
+        bottom_right = Point(0.0, 0.1, 10.)
+        bottom_left = Point(0.0, 0.0, 10.0)
+        self.plane = PlanarSurface.from_corner_points(top_left, top_right,
+                                                      bottom_right,
+                                                      bottom_left)
+
+    def test_valid_rupture_hypo_distribution(self):
+        hypo_dist_input = [[0.2, 0.25, 0.5 * 0.25],
+                           [0.5, 0.25, 0.5 * 0.5],
+                           [0.8, 0.25, 0.5 * 0.25],
+                           [0.2, 0.75, 0.5 * 0.25],
+                           [0.5, 0.75, 0.5 * 0.5],
+                           [0.8, 0.75, 0.5 * 0.25]]
+
+        hypo_dist = RuptureHypocenterDistribution(hypo_dist_input)
+        # Check hypocentre probabilities
+        numpy.testing.assert_array_almost_equal(
+            numpy.array([0.125, 0.25, 0.125, 0.125, 0.25, 0.125]),
+            hypo_dist.hypo_probs, 7)
+        # Check hypocentre positions
+        target_hypo_pos = numpy.array([[0.2, 0.25],
+                                    [0.5, 0.25],
+                                    [0.8, 0.25],
+                                    [0.2, 0.75],
+                                    [0.5, 0.75],
+                                    [0.8, 0.75]])
+        numpy.testing.assert_array_almost_equal(target_hypo_pos,
+                                                hypo_dist.hypo_pos, 7)
+        # Check slip distribution
+        self.assertListEqual(hypo_dist.slip_list, [])
+        # Try repeat with a different slip distribution
+        slip_dist2 = [[0.0, 0.5], [180.0, 0.5]]
+        hypo_dist2 = RuptureHypocenterDistribution(hypo_dist_input,
+                                                   slip_dist2)
+        numpy.testing.assert_array_almost_equal(numpy.array([[0.0, 0.5],
+                                                             [180., 0.5]]),
+                                                hypo_dist2.slip_list, 7.0)
+        # Check the rupture counts
+        print(len(hypo_dist), len(hypo_dist2))
+        self.assertEqual(len(hypo_dist), 6)
+        self.assertEqual(len(hypo_dist2), 12)
+
+    def test_generate_hypocentres_vertical(self):
+        hypo_dist_input = [[0.2, 0.25, 0.5 * 0.25],
+                           [0.5, 0.25, 0.5 * 0.5],
+                           [0.8, 0.25, 0.5 * 0.25],
+                           [0.2, 0.75, 0.5 * 0.25],
+                           [0.5, 0.75, 0.5 * 0.5],
+                           [0.8, 0.75, 0.5 * 0.25]]
+
+        hypo_dist = RuptureHypocenterDistribution(hypo_dist_input)
+        hypo_lons = numpy.zeros(6, dtype=float)
+        hypo_lats = numpy.array([0.02, 0.05, 0.08, 0.02, 0.05, 0.08])
+        hypo_depths = numpy.array([2.5, 2.5, 2.5, 7.5, 7.5, 7.5])
+        target_hypo_probs = numpy.array([0.125, 0.25, 0.125,
+                                         0.125, 0.25, 0.125])
+        for i, (hypocenter, slip, prob) in \
+            enumerate(hypo_dist.get_parameters_probabilities(self.plane)):
+            # Note here that the length of the planar fault is not the same
+            # as the distance between the top two points. This creates a
+            # discrepancy between the predicted and observed latitudes
+            self.assertAlmostEqual(hypocenter.longitude, hypo_lons[i], 3)
+            self.assertAlmostEqual(hypocenter.latitude, hypo_lats[i], 3)
+            self.assertAlmostEqual(hypocenter.depth, hypo_depths[i], 5)
+            self.assertAlmostEqual(prob, target_hypo_probs[i], 7)
+            self.assertAlmostEqual(slip, 0.0, 7)
+
+#    def test_generate_updip_vertical(self):
+#        hypo_dist_input = [[0.2, 0.25, 0.5 * 0.25],
+#                           [0.5, 0.25, 0.5 * 0.5],
+#                           [0.8, 0.25, 0.5 * 0.25],
+#                           [0.2, 0.75, 0.5 * 0.25],
+#                           [0.5, 0.75, 0.5 * 0.5],
+#                           [0.8, 0.75, 0.5 * 0.25]]
+#
+#        hypo_dist = RuptureHypocenterDistribution(hypo_dist_input)
+#        hypocenters, hypo_probs = hypo_dist.get_hypocenters_probabilities(
+#            self.plane)
+#
+#        hypo_lons = numpy.zeros(6, dtype=float)
+#        hypo_lats = numpy.array([0.02, 0.05, 0.08, 0.02, 0.05, 0.08])
+#        hypo_depths = numpy.zeros(6, dtype=float)
+#        for i, hypocenter in enumerate(hypocenters):
+#            updip = hypo_dist.project_updip(hypocenter, self.plane)
+#            self.assertAlmostEqual(updip.longitude, 0.0, 7)
+#            self.assertAlmostEqual(updip.latitude, hypo_lats[i], 5)
+#            self.assertAlmostEqual(updip.depth, 0.0, 7)
+#
+#    def test_hypocenter_updip_gc2_vertical(self):
+#        target_gc2t = numpy.zeros(6, dtype=float)
+#        target_gc2u = numpy.array([0.2 * self.plane.length,
+#                                   0.5 * self.plane.length,
+#                                   0.8 * self.plane.length,
+#                                   0.2 * self.plane.length,
+#                                   0.5 * self.plane.length,
+#                                   0.8 * self.plane.length])
+#
+#        hypo_dist_input = [[0.2, 0.25, 0.5 * 0.25],
+#                           [0.5, 0.25, 0.5 * 0.5],
+#                           [0.8, 0.25, 0.5 * 0.25],
+#                           [0.2, 0.75, 0.5 * 0.25],
+#                           [0.5, 0.75, 0.5 * 0.5],
+#                           [0.8, 0.75, 0.5 * 0.25]]
+#
+#        hypo_dist = RuptureHypocenterDistribution(hypo_dist_input)
+#        for i, (hypocenter, slip, prob) in \
+#            enumerate(hypo_dist.get_parameters_probabilities(self.plane)):
+#            updip = hypo_dist.project_updip(hypocenter, self.plane)
+#            # GC2-T, GC2-U for hypocentre
+#            gc2t, gc2u = hypo_dist.get_gc2_point(hypocenter, self.plane)
+#            self.assertAlmostEqual(gc2t[0], target_gc2t[i], 7)
+#            self.assertAlmostEqual(gc2u[0], target_gc2u[i], 7)
+#            # GC2-T, GC2-U for updip
+#            gc2t, gc2u = hypo_dist.get_gc2_point(updip, self.plane)
+#            self.assertAlmostEqual(gc2t[0], target_gc2t[i], 7)
+#            self.assertAlmostEqual(gc2u[0], target_gc2u[i], 7)
+#
+    def test_hypocenter_updip_dipping_plane(self):
+        top_left = Point(0.0, 0.0, 1.0)
+        top_right = Point(0.0, 0.1, 1.0)
+        bottom_right = Point(0.05, 0.1, 11.0)
+        bottom_left = Point(0.05, 0.0, 11.0)
+        plane2 = PlanarSurface.from_corner_points(top_left, top_right,
+                                                  bottom_right, bottom_left)
+
+        # Target hypocentres
+        target_hypos = numpy.array([[0.012497215, 0.019981162, 3.499442896],
+                                    [0.012497219, 0.049952904, 3.499442896],
+                                    [0.012497227, 0.079924647, 3.499442896],
+                                    [0.037491646, 0.019981158, 8.498328687],
+                                    [0.037491658, 0.049952895, 8.498328687],
+                                    [0.037491680, 0.079924631, 8.498328687]])
+        hypo_dist_input = [[0.2, 0.25, 0.5 * 0.25],
+                           [0.5, 0.25, 0.5 * 0.5],
+                           [0.8, 0.25, 0.5 * 0.25],
+                           [0.2, 0.75, 0.5 * 0.25],
+                           [0.5, 0.75, 0.5 * 0.5],
+                           [0.8, 0.75, 0.5 * 0.25]]
+        hypo_dist = RuptureHypocenterDistribution(hypo_dist_input)
+        for i, (hypocenter, slip, prob) in\
+            enumerate(hypo_dist.get_parameters_probabilities(plane2)):
+            self.assertAlmostEqual(hypocenter.longitude, target_hypos[i, 0], 7)
+            self.assertAlmostEqual(hypocenter.latitude, target_hypos[i, 1], 7)
+            self.assertAlmostEqual(hypocenter.depth, target_hypos[i, 2], 7)
+#        # Target updip values
+#        target_updips = numpy.array([[-0.005000000, 0.019981161, 0.000000000],
+#                                     [-0.005000000, 0.049952902, 0.000000000],
+#                                     [-0.005000000, 0.079924643, 0.000000000],
+#                                     [-0.005000000, 0.019981152, 0.000000000],
+#                                     [-0.005000000, 0.049952881, 0.000000000],
+#                                     [-0.005000000, 0.079924609, 0.000000000]])
+
+#            self.assertAlmostEqual(updip.longitude, target_updips[i, 0], 7)
+#            self.assertAlmostEqual(updip.latitude, target_updips[i, 1], 7)
+#            self.assertAlmostEqual(updip.depth, target_updips[i, 2], 7)
+#
+#    def test_hypocenter_updip_gc2_dipping(self):
+#        top_left = Point(0.0, 0.0, 1.0)
+#        top_right = Point(0.0, 0.1, 1.0)
+#        bottom_right = Point(0.05, 0.1, 11.0)
+#        bottom_left = Point(0.05, 0.0, 11.0)
+#        plane2 = PlanarSurface.from_corner_points(top_left, top_right,
+#                                                  bottom_right, bottom_left)
+#        # Target GC2 Hypocenters
+#        target_hypo_gc2 = numpy.array([[1.389626847, 2.221803803],
+#                                       [1.389626847, 5.554509507],
+#                                       [1.389626847, 8.887215212],
+#                                       [4.168880542, 2.221803380],
+#                                       [4.168880542, 5.554508450],
+#                                       [4.168880542, 8.887213520]])
+#        # Target GC2 Updips
+#        target_updip_gc2 = numpy.array([[-0.555974633, 2.221803699],
+#                                        [-0.555974633, 5.554509248],
+#                                        [-0.555974633, 8.887214797],
+#                                        [-0.555974633, 2.221802769],
+#                                        [-0.555974633, 5.554506923],
+#                                        [-0.555974633, 8.887211077]])
+#
+#        hypo_dist_input = [[0.2, 0.25, 0.5 * 0.25],
+#                           [0.5, 0.25, 0.5 * 0.5],
+#                           [0.8, 0.25, 0.5 * 0.25],
+#                           [0.2, 0.75, 0.5 * 0.25],
+#                           [0.5, 0.75, 0.5 * 0.5],
+#                           [0.8, 0.75, 0.5 * 0.25]]
+#        hypo_dist = RuptureHypocenterDistribution(hypo_dist_input)
+#        for i, (hypocenter, slip, prob) in\
+#            enumerate(hypo_dist.get_parameters_probabilities(plane2)):
+#            updip = hypo_dist.project_updip(hypocenter, plane2)
+#            gc2t, gc2u = hypo_dist.get_gc2_point(hypocenter, plane2)
+#            self.assertAlmostEqual(gc2t[0], target_hypo_gc2[i, 0], 7)
+#            self.assertAlmostEqual(gc2u[0], target_hypo_gc2[i, 1], 7)
+#            gc2t, gc2u = hypo_dist.get_gc2_point(updip, plane2)
+#            self.assertAlmostEqual(gc2t[0], target_updip_gc2[i, 0], 7)
+#            self.assertAlmostEqual(gc2u[0], target_updip_gc2[i, 1], 7)
+#   

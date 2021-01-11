@@ -316,3 +316,49 @@ class Point(object):
             A :class:`Point` object created from those coordinates.
         """
         return cls(*geo_utils.cartesian_to_spherical(vector))
+
+    def project_updip(self, surface):
+        """
+        Projects the point updip to the Earth's surface based on a
+        specific fault surface
+
+        :param surface:
+            Fault surface as instance of
+            :class:`openquake.hazardlib.geo.surface.base.BaseSurface`
+        :returns:
+            A :class:`Point` based on this projection
+        """
+        dip = surface.get_dip()
+        if numpy.isclose(dip, 90.0, rtol=0.001, atol=0.001):
+            # Vertical rupture - so just change depth
+            return self.point_at(0.0, -self.depth, 0.0)
+        else:
+            # Dipping ruputre - need to define along-surface distance and
+            # up-dip direction
+            updip_dir = (surface.get_strike() - 90.) % 360.0
+            surface_dist = self.depth / numpy.tan(numpy.radians(dip))
+            return self.point_at(surface_dist, -self.depth, updip_dir)
+
+    def get_gc2_point(self, surface):
+        """
+        Returns generalised coordinate system GC2 T- and U-
+        coordinates for the point based on a fault surface configuration, or
+        None if the surface does not define the GC2 coordinate systems
+
+        :param surface:
+            Fault surface as instance of
+            :class:`openquake.hazardlib.geo.surface.base.BaseSurface`
+        :returns:
+            GC2-T and GC2-U coordinate (or None) 
+        """
+        if "get_generalised_coordinates" in dir(surface):
+            # GC2 coordinates are calculated as numpy vectors even if just
+            # one element (as in this case)
+            gc2t, gc2u = surface.get_generalised_coordinates(
+                numpy.array([self.longitude]),
+                numpy.array([self.latitude]))
+            return gc2t[0], gc2u[0]
+        else:
+            # In the case that the surface does not have a
+            # get_generalised_coordinates function then return None
+            return None, None

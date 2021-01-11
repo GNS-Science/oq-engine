@@ -185,6 +185,100 @@ def to_checksum8(cls1, cls2):
     return sum(map(ord, names)) % 256
 
 
+class RuptureHypocenterDistribution(object):
+    """
+    Manages the distribution of hypocentres on a fault rupture plane
+
+    Some thoughts on behaviour:
+    1. When no hypo_list is specified it should return just a middle
+       point of the surface
+    2. If a slip list is specified it must be the same length as the
+       hypocentre position list
+
+    :param surface:
+        Rupture surface as instance of :class:
+        openquake.hazardlib.geo.surface.BaseSurface
+    :param float mesh_spacing:
+        Spacing of the surface mesh for those fault surfaces that need it
+    :param list hypo_pos:
+        Positions of the hypocentres as a list of fractions of
+        [along-strike-length, oown-dip-width
+    :param list hypo_probs:
+        List of probabilities of the corresponding hypocentre positions
+        (must sum to 1)
+    :param list slip_list:
+        List of slip distributions
+    """
+    def __init__(self, hypo_list=[], slip_list=[],
+                 mesh_spacing=None):
+        #
+        self.hypo_pos = [[hypo[0], hypo[1]] for hypo in hypo_list]
+        self.hypo_probs = [hypo[2] for hypo in hypo_list]
+        if len(self.hypo_probs):
+            # If a vector of probabilities are supplied then ensure
+            # that they sum to 1.0
+            assert numpy.isclose(sum(self.hypo_probs), 1.0)
+
+        if len(slip_list):
+            assert numpy.isclose(sum([slip[1] for slip in slip_list]), 1.0)
+            self.slip_list = slip_list
+            # In the case that the slip list is given then
+            # this must be the same length as the hypocenter list
+            # assert (len(slip_list) == len(hypo_list))
+        else:
+            self.slip_list = []
+
+    def __len__(self):
+        # Returns the number of different hypocentre positions or else 1
+        # if none are specified
+        if len(self.slip_list):
+            return len(self.hypo_pos) * len(self.slip_list)
+        else:
+            return len(self.hypo_pos)
+
+    def __iter__(self):
+        # Yield the hypocentre positions, slips and their associated
+        # probabilities
+        for hypo_pos, hypo_prob in zip(self.hypo_pos, self.hypo_probs):
+            if len(self.slip_list):
+                slip_out = self.slip_list
+            else:
+                slip_out = [[0.0, 1.0]]
+            for slip, slip_prob in slip_out:
+                yield hypo_pos, slip, hypo_prob * slip_prob
+
+    def get_hypocenters_probabilities(self, surface, mesh_spacing=None):
+        """
+        Defines the actual set of hypocentres as a list of :class:
+        openquake.hazardlib.geo.Point objects
+        """
+        if not len(self.hypo_pos):
+            # In the case that no hypocentre position
+            # is defined then the hypocentre is simply the
+            # middle point and its probability is unity
+            return [surface.get_middle_point()], [1.0]
+        # Gets the hypocentres
+        hypocenters = [surface.get_hypo_location(mesh_spacing, hypo_pos)
+                       for hypo_pos in self.hypo_pos]
+        return hypocenters, self.hypo_probs
+
+    def get_parameters_probabilities(self, surface, mesh_spacing=None):
+        """
+        Defines the full set of rupture properties (both hypocentre and
+        slip) and their corresponding probabilities
+        """
+        hypocenters, hypo_probs = self.get_hypocenters_probabilities(
+            surface, mesh_spacing=None)
+        for hypo, hypo_prob in zip(hypocenters, hypo_probs):
+            if len(self.slip_list):
+                slip_out = self.slip_list
+            else:
+                # If the slip is not defined then simply return [0.0, 1.0]
+                slip_out = [[0.0, 1.0]]
+            for slip, slip_prob in slip_out:
+                yield hypo, slip, hypo_prob * slip_prob
+
+
 class BaseRupture(metaclass=abc.ABCMeta):
     """
     Rupture object represents a single earthquake rupture.
@@ -240,7 +334,8 @@ class BaseRupture(metaclass=abc.ABCMeta):
         return code2cls
 
     def __init__(self, mag, rake, tectonic_region_type, hypocenter,
-                 surface, rupture_slip_direction=None, weight=None):
+                 surface, rupture_slip_direction=None, weight=None,
+                 apply_directivity=False):
         if not mag > 0:
             raise ValueError('magnitude must be positive')
         NodalPlane.check_rake(rake)
@@ -251,6 +346,7 @@ class BaseRupture(metaclass=abc.ABCMeta):
         self.surface = surface
         self.rupture_slip_direction = rupture_slip_direction
         self.weight = weight
+        self.apply_directivity = apply_directivity
 
     @property
     def code(self):
@@ -296,7 +392,8 @@ class NonParametricProbabilisticRupture(BaseRupture):
         in increasing order, and if they are not defined with unit step
     """
     def __init__(self, mag, rake, tectonic_region_type, hypocenter, surface,
-                 pmf, rupture_slip_direction=None, weight=None):
+                 pmf, rupture_slip_direction=None, weight=None,
+                 apply_directivity=False):
         occ = numpy.array([occ for (prob, occ) in pmf.data])
         if not occ[0] == 0:
             raise ValueError('minimum number of ruptures must be zero')
@@ -308,7 +405,7 @@ class NonParametricProbabilisticRupture(BaseRupture):
                 'numbers of ruptures must be defined with unit step')
         super().__init__(
             mag, rake, tectonic_region_type, hypocenter, surface,
-            rupture_slip_direction, weight)
+            rupture_slip_direction, weight, apply_directivity)
         # an array of probabilities with sum 1
         self.probs_occur = numpy.array([prob for (prob, occ) in pmf.data])
         self.occurrence_rate = numpy.nan
@@ -343,12 +440,12 @@ class ParametricProbabilisticRupture(BaseRupture):
     """
     def __init__(self, mag, rake, tectonic_region_type, hypocenter, surface,
                  occurrence_rate, temporal_occurrence_model,
-                 rupture_slip_direction=None):
+                 rupture_slip_direction=None, apply_directivity=False):
         if not occurrence_rate > 0:
             raise ValueError('occurrence rate must be positive')
         super().__init__(
             mag, rake, tectonic_region_type, hypocenter, surface,
-            rupture_slip_direction)
+            rupture_slip_direction, apply_directivity=apply_directivity)
         self.temporal_occurrence_model = temporal_occurrence_model
         self.occurrence_rate = occurrence_rate
 

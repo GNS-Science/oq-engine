@@ -824,14 +824,7 @@ class SourceConverter(RuptureConverter):
         fault_trace = self.geo_line(geom)
         mfd = self.convert_mfdist(node)
         with context(self.fname, node):
-            try:
-                hypo_list = valid.hypo_list(node.hypoList)
-            except AttributeError:
-                hypo_list = ()
-            try:
-                slip_list = valid.slip_list(node.slipList)
-            except AttributeError:
-                slip_list = ()
+            hypo_list, slip_list = self._parse_hypo_slip_list(node)
             simple = source.SimpleFaultSource(
                 source_id=node['id'],
                 name=node['name'],
@@ -849,6 +842,20 @@ class SourceConverter(RuptureConverter):
                 hypo_list=hypo_list,
                 slip_list=slip_list)
         return simple
+
+    def _parse_hypo_slip_list(self, node):
+        """
+        Parses the rupture hypocentre and slip distributions 
+        """
+        try:
+            hypo_list = valid.hypo_list(node.hypoList)
+        except AttributeError:
+            hypo_list = ()
+        try:
+            slip_list = valid.slip_list(node.slipList)
+        except AttributeError:
+            slip_list = ()
+        return hypo_list, slip_list
 
     def convert_complexFaultSource(self, node):
         """
@@ -886,6 +893,7 @@ class SourceConverter(RuptureConverter):
             a :class:`openquake.hazardlib.source.CharacteristicFaultSource`
             instance
         """
+        hypo_list, slip_list = self._parse_hypo_slip_list(node)
         char = source.CharacteristicFaultSource(
             source_id=node['id'],
             name=node['name'],
@@ -893,7 +901,12 @@ class SourceConverter(RuptureConverter):
             mfd=self.convert_mfdist(node),
             surface=self.convert_surfaces(node.surface),
             rake=~node.rake,
-            temporal_occurrence_model=self.get_tom(node))
+            temporal_occurrence_model=self.get_tom(node),
+            hypo_list=hypo_list,
+            slip_list=slip_list,
+            apply_directivity=valid.boolean(node.attrib.get(
+                                            "apply_directivity", "False"))
+        )
         return char
 
     def convert_nonParametricSeismicSource(self, node):
