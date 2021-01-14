@@ -368,3 +368,17 @@ class SimpleFaultSurface(BaseSurface):
         # width is uniform for simple faults
         left_column = self.mesh[:, 0:2]
         return left_column.get_mean_width()
+
+    def get_bottom_edge_depth(self):
+        """
+        Returns the depth of the bottom edge of the surface. Note that in the
+        base class this is taken from the mesh, but in the case of the
+        simple fault this results in a bottom edge that is dependent on the
+        mesh spacing. Instead this is calculated here from the top edge
+        depth, the dip and the rupture width
+        """
+        ztor = self.get_top_edge_depth()
+        dip = self.get_dip()
+        width = self.get_width()
+        thickness = self.get_width() * numpy.sin(numpy.radians(self.get_dip()))
+        return ztor + thickness

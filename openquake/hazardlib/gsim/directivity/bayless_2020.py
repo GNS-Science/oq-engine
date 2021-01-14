@@ -219,8 +219,10 @@ class BaylessEtAl2020(DirectivityModel):
             theta[theta < tmin] = tmin
             # On the hanging wall side 
             theta[gc2t > 0] = tmin
-            theta = np.arctan(np.fabs(theta / ry0))
-            return np.sin(theta)
+            ftheta = (np.pi / 2.) * np.ones(theta.shape)
+            idx = np.fabs(ry0) > 0.0
+            ftheta[idx] = np.arctan(np.fabs(theta[idx] / ry0[idx]))
+            return np.sin(ftheta)
 
     def _get_fphi(self, sof, dip, gc2t, tbot, dbot):
         # Returns the azimuthal predictor fphi - equations 6a and 6b
