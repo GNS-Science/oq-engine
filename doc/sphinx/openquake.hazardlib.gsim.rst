@@ -20,6 +20,14 @@ abrahamson_2015
     :undoc-members:
     :show-inheritance:
 
+abrahamson_2015_config_mbreak
+-----------------------------------------------
+
+.. automodule:: openquake.hazardlib.gsim.abrahamson_2015_config_mbreak
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 abrahamson_2018
 -----------------------------------------------
 
@@ -673,6 +681,14 @@ hassani_atkinson_2020
     :undoc-members:
     :show-inheritance:
 
+hassani_atkinson_2020_config_mbreak
+---------------------------------------------
+
+.. automodule:: openquake.hazardlib.gsim.hassani_atkinson_2020_config_mbreak
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
 hong_goda_2007
 ----------------------------------------------
 
@@ -907,6 +923,22 @@ parker_2020
 ---------------------------------------------
 
 .. automodule:: openquake.hazardlib.gsim.parker_2020
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+parker_2020
+---------------------------------------------
+
+.. automodule:: openquake.hazardlib.gsim.parker_2020
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+parker_2020_config_mbreak
+---------------------------------------------
+
+.. automodule:: openquake.hazardlib.gsim.parker_2020_config_mbreak
     :members:
     :undoc-members:
     :show-inheritance:
